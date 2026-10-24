@@ -48,6 +48,7 @@ input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;b
 #ptt.live{background:var(--ok);color:#03150d;border-color:var(--ok)}
 #toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:#000d;border:1px solid var(--line);padding:9px 14px;border-radius:10px;z-index:1000;max-width:90vw;text-align:center}
 .small{font-size:12px;color:var(--mute)}
+#insecure{background:#ff5a4f26;border:1px solid var(--hider);color:#ffb3ad;border-radius:12px;padding:12px;margin-bottom:14px;font-size:14px}
 /* map markers */
 .nm{background:#000c;color:#fff;font-size:12px;font-weight:700;padding:1px 7px;border-radius:6px;max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
 .tm{font-size:10px;color:#fff;background:#000a;padding:0 5px;border-radius:5px;margin-top:2px;white-space:nowrap}
@@ -65,6 +66,7 @@ input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;b
 <div id="join">
   <h1>MANHUNT HQ</h1>
   <p class="sub">Live team map, hider pings, team walkie-talkies.</p>
+  <div id="insecure" class="hidden"><b>⚠ Location and mic are blocked on this page.</b><br>Browsers only allow them when the site is opened over <b>https://</b> — not from a saved/downloaded file or plain http. Upload this file to Netlify Drop, GitHub Pages or Cloudflare Pages, then open that https link on every phone.</div>
   <div class="card">
     <div class="row" style="align-items:center">
       <div class="av" id="picPrev" style="flex:0 0 72px"></div>
@@ -106,6 +108,8 @@ input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;b
     <div id="count">--:--</div>
 
     <div id="lobbyBox">
+      <button class="btn alt" id="testLoc" style="margin-top:8px">📍 Test my location</button>
+      <div class="small" id="geoStatus" style="margin-top:6px"></div>
       <div id="hostSettings" class="hidden">
         <div class="row" style="margin-top:6px">
           <div><label class="l">Seekers</label><input type="number" id="seekN" value="1" min="0" max="20"></div>
@@ -120,6 +124,7 @@ input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;b
     </div>
 
     <div class="row" style="margin-top:8px">
+      <button class="btn alt hidden" id="pingNow">Ping now</button>
       <button class="btn red hidden" id="end">End game</button>
       <button class="btn alt hidden" id="again">New round</button>
     </div>
@@ -165,6 +170,21 @@ async function getMic(){
     localStream = new MediaStream();
     $('micnote').textContent='Mic unavailable — you can listen but not talk. Allow microphone access and rejoin.';
   }
+}
+// ---- location diagnostics ----
+const secureOk = window.isSecureContext && location.protocol !== 'file:';
+if(!secureOk) $('insecure').classList.remove('hidden');
+function geoErr(e){ if(!secureOk) return 'insecure'; if(!navigator.geolocation) return 'unsupported'; return e && e.code===1 ? 'denied' : e && e.code===2 ? 'unavailable' : e && e.code===3 ? 'timeout' : 'error'; }
+function geoHelp(c){ return ({
+  insecure:'This page must be opened over https:// (not a saved file or http). Host it on Netlify / GitHub Pages.',
+  denied:'Location is blocked. Allow it for this site in your browser settings, and make sure Location Services is on for your browser.',
+  unavailable:'No GPS fix available. Check Location Services is on, or step outside.',
+  timeout:'Location took too long. Move to open sky and try again.',
+  unsupported:'This browser has no location support.',
+  error:'Location failed.' })[c] || 'Location failed.'; }
+function getFix(ok, bad){
+  if(!secureOk || !navigator.geolocation){ bad(geoErr()); return; }
+  navigator.geolocation.getCurrentPosition(ok, e => bad(geoErr(e)), {enableHighAccuracy:true, timeout:20000, maximumAge:0});
 }
 async function keepAwake(){ try{ if('wakeLock' in navigator) await navigator.wakeLock.request('screen'); }catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && state && state.status==='running') keepAwake(); });
@@ -318,7 +338,7 @@ function hostHandle(pid, d){
   else if(d.t==='loc'){            // only hiders ping; this is the exact fix, which never leaves the host/hiders
     const p = state.players[pid]; if(!p || p.team!=='hider' || state.status!=='running') return;
     const arr = state.locs[pid] = state.locs[pid] || [];
-    if(d.err || typeof d.lat!=='number' || typeof d.lng!=='number') arr.push({n:state.pingN, err:true, ts:Date.now()});
+    if(d.err || typeof d.lat!=='number' || typeof d.lng!=='number') arr.push({n:state.pingN, err:String(d.err||'error').slice(0,20), ts:Date.now()});
     else {
       const prev = [...arr].reverse().find(a => !a.err && a.lat!==undefined);
       let clat, clng;
@@ -346,7 +366,7 @@ function viewFor(team){
   const locs = {};
   Object.entries(state.locs).forEach(([id,arr]) => {
     const p = state.players[id]; if(!p || p.team!=='hider') return;
-    locs[id] = team==='hider' ? arr : arr.map(a => a.err ? {n:a.n, err:true, ts:a.ts} : {n:a.n, ts:a.ts, clat:a.clat, clng:a.clng});
+    locs[id] = team==='hider' ? arr : arr.map(a => a.err ? {n:a.n, err:a.err, ts:a.ts} : {n:a.n, ts:a.ts, clat:a.clat, clng:a.clng});
   });
   const lv = {};
   Object.entries(liveStore).forEach(([id,l]) => { const p=state.players[id]; if(p && p.team===team) lv[id]=l; });
@@ -356,14 +376,19 @@ function broadcast(){
   Object.entries(conns).forEach(([cid,c]) => { try{ c.send({t:'state', s:viewFor(state.players[cid]?.team)}); }catch(e){} });
   applyState(JSON.parse(JSON.stringify(viewFor(state.players[me.id]?.team))));
 }
+function firePing(){
+  state.pingN++;
+  Object.values(conns).forEach(c => { try{ c.send({t:'ping'}); }catch(e){} });
+  doPing(); broadcast();
+}
 function hostTick(){
   if(!me.isHost) return;
   if(state.status==='running' && Date.now() >= state.nextPing){
-    state.pingN++; state.nextPing += state.pingMin*60000;
-    Object.values(conns).forEach(c => { try{ c.send({t:'ping'}); }catch(e){} });
-    doPing(); broadcast();
+    state.nextPing += state.pingMin*60000;
+    firePing();
   }
 }
+$('pingNow').onclick = () => { if(me.isHost && state.status==='running') firePing(); };
 $('start').onclick = () => {
   state.hideMin = Math.max(0, +$('hideMin').value||0); state.pingMin = Math.max(1, +$('pingMin').value||5);
   state.locs = {}; liveStore = {}; live = {}; state.pingN = 0; state.startAt = Date.now();
@@ -409,7 +434,7 @@ function startWatch(){
     live[me.id] = {lat:lastFix.lat, lng:lastFix.lng, acc:lastFix.acc, ts:Date.now()+skew};
     drawLive();
     send({t:'live', lat:lastFix.lat, lng:lastFix.lng, acc:lastFix.acc});
-  }, e => { if(!watchErrShown){ watchErrShown=true; toast('Live location unavailable: '+e.message, 6000); } },
+  }, e => { if(!watchErrShown){ watchErrShown=true; toast('Live location off: '+geoHelp(geoErr(e)), 9000); } },
   {enableHighAccuracy:true, maximumAge:2000, timeout:20000});
 }
 function stopWatch(){ if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; } lastFix=null; }
@@ -422,11 +447,9 @@ function doPing(){
   if(!state || state.status!=='running' || me.team!=='hider') return;
   toast('Ping! Sharing a rough area of your location…');
   if(lastFix && Date.now()-lastFix.ts < 20000){ send({t:'loc', lat:lastFix.lat, lng:lastFix.lng, acc:lastFix.acc}); return; }
-  if(!navigator.geolocation){ send({t:'loc', err:'unsupported'}); return; }
-  navigator.geolocation.getCurrentPosition(
+  getFix(
     p => send({t:'loc', lat:p.coords.latitude, lng:p.coords.longitude, acc:p.coords.accuracy}),
-    e => { toast('Could not get your location: '+e.message); send({t:'loc', err:e.message}); },
-    {enableHighAccuracy:true, timeout:20000, maximumAge:0}
+    code => { toast('Ping failed: '+geoHelp(code), 9000); send({t:'loc', err:code}); }
   );
 }
 
@@ -443,6 +466,7 @@ function render(){
   $('guestWait').classList.toggle('hidden', me.isHost || !lobby);
   $('lobbyBox').classList.toggle('hidden', !lobby);
   $('end').classList.toggle('hidden', !(me.isHost && s.status==='running'));
+  $('pingNow').classList.toggle('hidden', !(me.isHost && s.status==='running'));
   $('again').classList.toggle('hidden', !(me.isHost && s.status==='over'));
 
   $('teambar').className = me.team==='hider'?'h':'s';
@@ -459,7 +483,7 @@ function render(){
     li.appendChild(avatar(p,24,p.team));
     const n=document.createElement('span'); n.className='nm2'; n.textContent=(id===s.hostId?'👑 ':'')+p.name+(id===me.id?' (you)':'')+(p.off?' · offline':''); li.appendChild(n);
     const last = (s.locs[id]||[]).slice(-1)[0];
-    if(last){ const r=document.createElement('span'); r.className='small'; r.textContent = last.err ? 'no fix' : 'ping '+ago(last.ts); li.appendChild(r); }
+    if(last){ const r=document.createElement('span'); r.className='small'; r.textContent = last.err ? 'no fix ('+last.err+')' : 'ping '+ago(last.ts); li.appendChild(r); }
     if(me.isHost && lobby){ li.classList.add('tap'); li.onclick = () => { state.players[id].team = state.players[id].team==='hider'?'seeker':'hider'; broadcast(); }; }
     ul.appendChild(li);
   });
@@ -567,11 +591,16 @@ function fitMap(){
 }
 $('fit').onclick = fitMap;
 $('locme').onclick = () => {
-  navigator.geolocation.getCurrentPosition(p => {
+  getFix(p => {
     const ll=[p.coords.latitude,p.coords.longitude];
     if(meMarker) meMarker.setLatLng(ll); else meMarker=L.circleMarker(ll,{radius:8,color:'#fff',weight:2,fillColor:'#3ecf8e',fillOpacity:1}).bindTooltip('You (private, one-time)').addTo(map);
     map.setView(ll,17);
-  }, e => toast('Location error: '+e.message), {enableHighAccuracy:true,timeout:15000});
+  }, code => toast(geoHelp(code), 9000));
+};
+$('testLoc').onclick = () => {
+  const el = $('geoStatus'); el.textContent = 'Checking…';
+  getFix(p => { el.textContent = '✅ Location works (±'+Math.round(p.coords.accuracy)+' m)'; },
+         code => { el.textContent = '❌ '+geoHelp(code); });
 };
 $('share').onclick = async () => {
   const url = location.origin+location.pathname+'?room='+me.code;
