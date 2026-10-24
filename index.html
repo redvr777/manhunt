@@ -342,6 +342,17 @@ input[type=text],input[type=number]{font-size:22px;min-height:48px}
 #photo:not(.hidden) #pImg{animation:develop 2.2s ease-out .35s backwards}
 #photo:not(.hidden) .stamp{animation:slam .5s cubic-bezier(.2,1.2,.4,1) .15s backwards}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.rip{display:none}}
+/* ===== PERFORMANCE (budget phones): turn off the effects that cost the most GPU ===== */
+body::before,body::after,#app::before,#join::before{display:none!important}
+*,*::before,*::after{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+.logo,.pin,.area-ring,#count,#count.urgent{filter:none!important}
+.area-ring,#count.urgent,.logo .i,#adminTag,#status[data-s=running]::before,.av.self,.camtile .ct .dot,#srvList .msg0{animation:none!important}
+#ptt:not(.live)::after,#create::after,#start::after,#joinbtn::after{display:none!important}
+body[data-theme] .leaflet-tile-pane{transition:none!important}
+.leaflet-fade-anim .leaflet-tile{transition:none!important}
+body[data-theme=neutral]{--map:invert(1) grayscale(1) brightness(.85)}
+body[data-theme=hider]{--map:invert(1) sepia(1) hue-rotate(-18deg) brightness(.8)}
+body[data-theme=seeker]{--map:invert(1) sepia(1) hue-rotate(150deg) brightness(.8)}
 </style></head>
 <body data-theme="neutral">
 
@@ -363,7 +374,7 @@ input[type=text],input[type=number]{font-size:22px;min-height:48px}
     <input type="text" id="code" class="codeIn" maxlength="4" placeholder="ABCD" autocomplete="off">
     <label class="l" for="pass">Passcode (from the host)</label><input type="text" id="pass" class="codeIn" maxlength="6" inputmode="numeric" autocomplete="off" placeholder="000000">
     <button class="btn ghost" id="joinbtn" style="margin-top:14px">Join game</button></div>
-  <p class="small"><b>How it works.</b> Everyone sees seekers live. Seekers never see a hider's live dot. They only get a rough 0.2 mile circle around hiders each ping. One minute after each ping, every hider’s camera takes a photo that goes to the seekers with the hider’s name. Hiders: allow the camera when asked.</p>
+  <p class="small"><b>How it works.</b> Everyone sees seekers live. Seekers never see a hider's live dot. They only get a rough 0.1 mile circle around hiders each ping. One minute after each ping, every hider’s camera takes a photo that goes to the seekers with the hider’s name. Hiders: allow the camera when asked.</p>
   <p class="small"><b>Background.</b> Keep the Manhunt tab open and switch apps or lock the screen. Do not swipe it away. A closed page cannot run, no browser allows that.</p>
 </div></section>
 
@@ -452,7 +463,7 @@ input[type=text],input[type=number]{font-size:22px;min-height:48px}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
-const RAD=321.87, FUZZ=160, STILL=100, HC='#ff5b1f', SC='#4cc9ff';
+const RAD=160.93, FUZZ=80, STILL=50, HC='#ff5b1f', SC='#4cc9ff';   // RAD = 0.1 mile in meters
 const $=id=>document.getElementById(id);
 const me={id:null,name:'',team:'hider',isHost:false,code:'',pic:null};
 let peer,hostConn=null,localStream=null,snapStream=null,state=null,skew=0,entered=false,lastPingN=null,first=true,prevStatus=null,sheetOpen=false;
@@ -488,18 +499,18 @@ function makeIR(sec,decay){
 function audio(){
   try{
     if(!A){
-      A=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+      A=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'playback'});
       master=A.createGain();master.gain.value=.9;
       const sat=A.createWaveShaper(),cv=new Float32Array(1024);
       for(let i=0;i<1024;i++){const x=i/512-1;cv[i]=Math.tanh(x*1.6)/Math.tanh(1.6)}
-      sat.curve=cv;sat.oversample='2x';
+      sat.curve=cv;sat.oversample='none';
       const comp=A.createDynamicsCompressor();comp.threshold.value=-16;comp.knee.value=18;comp.ratio.value=3.5;comp.attack.value=.004;comp.release.value=.22;
       const hp=A.createBiquadFilter();hp.type='highpass';hp.frequency.value=26;
       master.connect(sat);sat.connect(hp);hp.connect(comp);comp.connect(A.destination);
       dry=A.createGain();dry.connect(master);
       wetIn=A.createGain();
       const pre=A.createDelay(.1);pre.delayTime.value=.022;
-      const verb=A.createConvolver();verb.buffer=makeIR(2.8,2.4);
+      const verb=A.createConvolver();verb.buffer=makeIR(1.7,2.4);
       const vg=A.createGain();vg.gain.value=.55;
       wetIn.connect(pre);pre.connect(verb);verb.connect(vg);vg.connect(master);
       const dl=A.createDelay(1),dr=A.createDelay(1),fb=A.createGain(),tn=A.createBiquadFilter(),eg=A.createGain(),mg=A.createChannelMerger(2);
@@ -883,7 +894,7 @@ function renderGal(){const g=$('gal');g.innerHTML='';$('galWrap').classList.togg
 /* ===== reveal + render ===== */
 function showReveal(){
   const r=$('reveal'),h=me.team==='hider';r.dataset.t=me.team;$('rvWord').textContent=h?'HIDE':'SEEK';
-  $('rvSub').textContent=h?'Seekers get a 0.2 mile circle every '+state.pingMin+' min, then your photo. Keep moving.':'Hiders show as circles every '+state.pingMin+' min, then a photo of each. Everyone sees you live.';
+  $('rvSub').textContent=h?'Seekers get a 0.1 mile circle every '+state.pingMin+' min, then your photo. Keep moving.':'Hiders show as circles every '+state.pingMin+' min, then a photo of each. Everyone sees you live.';
   r.className='';void r.offsetWidth;r.classList.add('show');play(h?'hide':'seek');
   notify(h?'You are a HIDER':'You are a SEEKER',h?'Go hide.':'Get ready.','role');if(navigator.vibrate)navigator.vibrate([120,60,120,60,300]);
   clearTimeout(showReveal._a);clearTimeout(showReveal._b);showReveal._a=setTimeout(()=>r.classList.add('fade'),3000);showReveal._b=setTimeout(()=>{r.className='hidden'},3600)}
@@ -905,7 +916,7 @@ function render(){
   $('hostSettings').classList.toggle('hidden',!(me.isHost&&lobby));$('hostNote').classList.toggle('hidden',!me.isHost);$('guestWait').classList.toggle('hidden',me.isHost||!lobby);$('lobbyBox').classList.toggle('hidden',!lobby);
   $('end').classList.toggle('hidden',!(me.isHost&&s.status==='running'));$('adminSwitch').classList.toggle('hidden',!me.admin);$('adminSwitch').textContent='Admin: switch to '+(me.team==='hider'?'Seeker':'Hider');$('pingNow').classList.toggle('hidden',!(me.isHost&&s.status==='running'));$('again').classList.toggle('hidden',!(me.isHost&&s.status==='over'));
   $('teamTxt').textContent=lobby?'Right now you are a '+me.team:(me.team==='hider'?"You're hiding":"You're seeking");
-  $('rule').textContent=me.team==='hider'?`You see every seeker live, plus fellow hiders. Seekers only see a rough 0.2 mile circle around you every ${s.pingMin} min, and your camera photo 1 min later.`:`You see fellow seekers live. Hiders stay hidden and only appear as 0.2 mile circles every ${s.pingMin} min, followed by a photo of each.`;
+  $('rule').textContent=me.team==='hider'?`You see every seeker live, plus fellow hiders. Seekers only see a rough 0.1 mile circle around you every ${s.pingMin} min, and your camera photo 1 min later.`:`You see fellow seekers live. Hiders stay hidden and only appear as 0.1 mile circles every ${s.pingMin} min, followed by a photo of each.`;
   const a=avatar(s.players[me.id]||{name:me.name,pic:me.pic},40,me.team);$('meAv').replaceChildren(...a.childNodes);$('meAv').className=a.className;
   $('pttSub').textContent=me.team==='hider'?'Hider radio':'Seeker radio';$('sheetCount').textContent=Object.values(s.players).filter(p=>!p.off).length;renderGal();
   const ul=$('players');ul.innerHTML='';
@@ -926,7 +937,7 @@ function tick(){
 setInterval(()=>{if(entered&&state)drawMap()},5000);
 
 /* ===== map ===== */
-function initMap(){map=L.map('map',{zoomControl:false}).setView([39,-98],4);L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+function initMap(){map=L.map('map',{zoomControl:false,preferCanvas:true,fadeAnimation:false,markerZoomAnimation:false}).setView([39,-98],4);L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap',updateWhenIdle:true,keepBuffer:1}).addTo(map);
   L.control.zoom({position:'bottomleft'}).addTo(map);layerP=L.layerGroup().addTo(map);layerL=L.layerGroup().addTo(map);setTimeout(()=>map.invalidateSize(),200)}
 const rot=id=>{let h=0;for(const ch of String(id))h=(h*31+ch.charCodeAt(0))|0;return((Math.abs(h)%7)-3)+'deg'};
 const tape=(t,team,id)=>{const d=document.createElement('div');d.className='tape '+(team==='hider'?'th':'ts');d.textContent=t;d.style.setProperty('--rot',rot(id||t));return d};
@@ -937,24 +948,28 @@ function clusterIcon(items,maxN,newest){
   const row=document.createElement('div');row.className='crow';
   items.slice(0,8).forEach(it=>{const c=document.createElement('div');c.className='ccol';c.append(tape(it.p.name,'hider',it.id),avatar(it.p,44,'hider'));
     if(it.n<maxN){const t=document.createElement('div');t.className='tm';t.textContent='ping '+it.n;c.appendChild(t)}row.appendChild(c)});
-  const lb=document.createElement('div');lb.className='rad';const b=document.createElement('b');b.textContent='.2 mile radius';
+  const lb=document.createElement('div');lb.className='rad';const b=document.createElement('b');b.textContent='.1 mile radius';
   lb.append(b,document.createTextNode(items.length+(items.length===1?' hider':' hiders')+', ping '+maxN+', '+ago(newest)));
   w.append(row,lb);const W=Math.max(180,Math.min(items.length,8)*70);
   return L.divIcon({html:w,className:'',iconSize:[W,118],iconAnchor:[W/2,62]})}
 function drawMap(){if(!map)return;drawPings();drawLive();if(!fitted&&fitMap())fitted=true}
+let pingSig='';
 function drawPings(){
+  const sig=JSON.stringify([state.areas,state.locs,me.team])+Math.floor(Date.now()/15000);   // skip rebuilding when nothing changed
+  if(sig===pingSig)return;pingSig=sig;
   layerP.clearLayers();
   Object.values(state.locs).forEach(arr=>{const g=arr.filter(a=>!a.err&&a.clat!==undefined);if(!g.length)return;
     if(g.length>1)L.polyline(g.map(a=>[a.clat,a.clng]),{color:HC,weight:2,opacity:.35,dashArray:'4 7',interactive:false}).addTo(layerP);
     g.slice(0,-1).forEach(a=>L.circleMarker([a.clat,a.clng],{radius:3,color:HC,weight:1,fillOpacity:.4,interactive:false}).addTo(layerP))});
   (state.areas||[]).forEach(ar=>{const c=[ar.clat,ar.clng],items=ar.m.map(x=>({id:x.id,n:x.n,ts:x.ts,p:state.players[x.id]||{name:'?'}}));
-    if(me.team==='hider'){L.circle(c,{radius:RAD,color:HC,weight:1.5,className:'area-ring',fillColor:HC,fillOpacity:.05,interactive:false}).addTo(layerP);
+    if(me.team==='hider'){L.circle(c,{radius:RAD,color:HC,weight:1.5,dashArray:'12 9',fillColor:HC,fillOpacity:.05,interactive:false}).addTo(layerP);
       const lb=document.createElement('div');lb.className='rad dim';lb.textContent='Seekers see '+items.map(i=>i.p.name).join(', ')+' here';
       L.marker(c,{icon:L.divIcon({html:lb,className:'',iconSize:[280,24],iconAnchor:[140,12]}),interactive:false}).addTo(layerP)}
-    else{L.circle(c,{radius:RAD,color:HC,weight:2.5,className:'area-ring',fillColor:HC,fillOpacity:.14,interactive:false}).addTo(layerP);
+    else{L.circle(c,{radius:RAD,color:HC,weight:2.5,dashArray:'12 9',fillColor:HC,fillOpacity:.14,interactive:false}).addTo(layerP);
       L.marker(c,{icon:clusterIcon(items,Math.max(...ar.m.map(x=>x.n)),Math.max(...ar.m.map(x=>x.ts))),interactive:false,zIndexOffset:300}).addTo(layerP)}});
 }
-function drawLive(){
+let dlq=0;function drawLive(){if(dlq)return;dlq=requestAnimationFrame(()=>{dlq=0;drawLiveNow()})}   // merge bursts of updates into one redraw per frame
+function drawLiveNow(){
   if(!layerL||!state)return;layerL.clearLayers();
   Object.entries(live).forEach(([id,l])=>{const p=state.players[id];if(!p||p.off)return;
     if(id!==me.id&&!canSeeLive(me.team,p.team))return;   // seekers never draw a hider's live dot
@@ -1222,13 +1237,13 @@ function scanServers(){
   try{if(lister)lister.destroy()}catch(e){}
   const found={};lister=new Peer();lister.on('error',()=>{});   // "peer-unavailable" just means that slot is empty
   lister.on('open',()=>{
-    for(let i=0;i<40;i++){const c=lister.connect('mhdir-'+i,{reliable:true});const t=setTimeout(()=>{try{c.close()}catch(e){}},4000);
+    for(let i=0;i<12;i++){const c=lister.connect('mhdir-'+i,{reliable:true});const t=setTimeout(()=>{try{c.close()}catch(e){}},4000);
       c.on('open',()=>c.send({t:'peek'}));
       c.on('data',d=>{if(d&&d.t==='info'&&d.i&&d.i.code){found[d.i.code]=d.i;clearTimeout(t);try{c.close()}catch(e){}paintServers(found,false)}})}
     setTimeout(()=>{paintServers(found,true);try{lister.destroy()}catch(e){}},4500)});
 }
 $('srvRefresh').onclick=scanServers;
-setInterval(()=>{if(!entered&&!roomClosed&&!document.hidden)scanServers()},20000);
+setInterval(()=>{if(!entered&&!roomClosed&&!document.hidden)scanServers()},30000);
 scanServers();
 
 /* ===== auto-resume after reload or discarded tab (host restores the saved game) ===== */
