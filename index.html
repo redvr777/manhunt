@@ -475,6 +475,12 @@ body[data-theme=seeker]{--map:invert(1) sepia(1) hue-rotate(150deg) brightness(.
 <script>
 const RAD=160.93, FUZZ=80, STILL=50, HC='#ff5b1f', SC='#4cc9ff';   // RAD = 0.1 mile in meters
 const $=id=>document.getElementById(id);
+/* STUN finds a direct path; TURN relays when phones on cell data cannot reach each other directly */
+const PEER_OPTS={debug:0,config:{iceCandidatePoolSize:4,iceServers:[
+  {urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:'stun:global.stun.twilio.com:3478'},
+  {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp','turns:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}]}};
+const NET_ERR=['network','server-error','socket-error','socket-closed'];
+let hostTries=0;
 const me={id:null,name:'',team:'hider',isHost:false,code:'',pic:null};
 let peer,hostConn=null,localStream=null,snapStream=null,state=null,skew=0,entered=false,lastPingN=null,first=true,prevStatus=null,sheetOpen=false;
 let liveStore={},live={},conns={},calls={},audioEls={},photos=[],chatLog=[],chatMsgs=[];
@@ -697,8 +703,11 @@ function commonPeer(){
 }
 async function startHost(code,restore){if(!permsOk){afterGate=()=>startHost(code,restore);showGate();return}
   me.isHost=true;me.code=code;store.set('mh_sess',JSON.stringify({code,host:true,ts:Date.now()}));await getMic();
-  peer=new Peer('manhunt-'+code);hostPass=String(Math.floor(100000+Math.random()*900000));beaconStop=false;peer.on('open',()=>{startBeacon(0);$('passShow').textContent=hostPass});
-  peer.on('error',e=>toast(e.type==='unavailable-id'?'Code clash or old host still connected. Try again.':'Connection error: '+e.type));
+  peer=new Peer('manhunt-'+code,PEER_OPTS);hostPass=String(Math.floor(100000+Math.random()*900000));beaconStop=false;peer.on('open',()=>{startBeacon(0);$('passShow').textContent=hostPass});
+  peer.on('error',e=>{
+    if(NET_ERR.includes(e.type)&&!state&&++hostTries<6){toast('Server busy, retrying…',2500);try{peer.destroy()}catch(_){}setTimeout(()=>startHost(code,restore),2000);return}
+    if(NET_ERR.includes(e.type)){return}   // already in a game: the keep-alive timer reconnects quietly
+    toast(e.type==='unavailable-id'?'Code clash or old host still connected. Try again.':'Connection error: '+e.type)});
   peer.on('open',id=>{me.id=id;
     if(restore&&restore.players){state=restore;state.hostId=id;Object.keys(state.players).forEach(k=>{if(k!==id){state.players[k].off=true;state.players[k].offAt=Date.now()}});state.players[id]=Object.assign(state.players[id]||{},{name:me.name,pic:me.pic,off:false})}
     else state={name:srvName,status:'lobby',hostId:id,order:[id],players:{[id]:{name:me.name,team:'hider',pic:me.pic}},hideMin:5,pingMin:2,startAt:0,nextPing:0,photoAt:0,pingN:0,locs:{}};
@@ -714,7 +723,7 @@ async function doJoin(){if(!permsOk){afterGate=doJoin;showGate();return}audio();
 $('joinbtn').onclick=doJoin;
 function newGuestPeer(tries){
   try{if(peer&&!peer.destroyed)peer.destroy()}catch(e){}
-  peer=new Peer('mhp-'+me.code+'-'+uid);
+  peer=new Peer('mhp-'+me.code+'-'+uid,PEER_OPTS);
   peer.on('error',e=>{
     if(e.type==='unavailable-id'&&tries<15){setTimeout(()=>newGuestPeer(tries+1),3000);return}
     if(e.type==='peer-unavailable'){
@@ -723,13 +732,20 @@ function newGuestPeer(tries){
         hostGoneAt=hostGoneAt||Date.now();
         if(Date.now()-hostGoneAt>12000)closeRoom('The host left, so this room is closed.')}
       return}
+    if(NET_ERR.includes(e.type)&&!entered&&tries<6){toast('Server busy, retrying…',2000);setTimeout(()=>newGuestPeer(tries+1),2500);return}
+    if(NET_ERR.includes(e.type)&&entered)return;   // mid-game: the keep-alive timer reconnects quietly
     if(!entered)toast('Connection error: '+e.type)});
-  peer.on('open',id=>{me.id=id;recreating=false;connectToHost('manhunt-'+me.code,ok=>{if(!ok&&!entered){toast(me.denied?'Wrong passcode. Ask the host.':'Could not join that room');store.set('mh_sess','');try{peer.destroy()}catch(e){}}else if(!ok)attemptReconnect()})});
+  peer.on('open',id=>{me.id=id;recreating=false;let n=0;
+    const go=()=>connectToHost('manhunt-'+me.code,ok=>{
+      if(!ok&&!entered){if(!me.denied&&++n<3){toast('Still connecting… try '+(n+1)+' of 3',3000);setTimeout(go,1500);return}
+        toast(me.denied?'Wrong passcode. Ask the host.':'Could not reach that room. Check the code and that the host is still on the page.');store.set('mh_sess','');try{peer.destroy()}catch(e){}}
+      else if(!ok)attemptReconnect()});
+    go()});
   commonPeer();
 }
 function connectToHost(hid,cb){
   const c=peer.connect(hid,{reliable:true});let done=false;
-  const fail=()=>{if(done)return;done=true;clearTimeout(to);try{c.close()}catch(e){}cb&&cb(false)};const to=setTimeout(fail,6000);
+  const fail=()=>{if(done)return;done=true;clearTimeout(to);try{c.close()}catch(e){}cb&&cb(false)};const to=setTimeout(fail,15000);
   c.on('open',()=>c.send({t:'hello',name:me.name,pic:me.pic,pass:me.pass,admin:me.admin?ADMIN_CODE:''}));
   c.on('data',d=>{
     if(d.t==='state'){if(!done){done=true;clearTimeout(to);hostConn=c;cb&&cb(true)}applyState(d.s)}
@@ -1328,7 +1344,7 @@ setInterval(async()=>{
 let srvName='',hostPass='',beacon=null,beaconStop=false,lister=null;const badTries={};
 function pubInfo(){return{code:me.code,name:(state&&state.name)||'Manhunt',host:me.name,n:state?Object.values(state.players).filter(p=>!p.off).length:1,status:state?state.status:'lobby'}}
 function startBeacon(i){
-  if(i>=40||beaconStop)return;const b=new Peer('mhdir-'+i);
+  if(i>=40||beaconStop)return;const b=new Peer('mhdir-'+i,PEER_OPTS);
   b.on('open',()=>{beacon=b});
   b.on('connection',c=>c.on('data',d=>{if(d&&d.t==='peek'&&state){try{c.send({t:'info',i:pubInfo()})}catch(e){}}}));
   b.on('disconnected',()=>setTimeout(()=>{try{if(!b.destroyed)b.reconnect()}catch(e){}},1000));
@@ -1346,7 +1362,7 @@ function paintServers(found,final){
 function scanServers(){
   if(entered||roomClosed)return;paintServers({},false);
   try{if(lister)lister.destroy()}catch(e){}
-  const found={};lister=new Peer();lister.on('error',()=>{});   // "peer-unavailable" just means that slot is empty
+  const found={};lister=new Peer(undefined,PEER_OPTS);lister.on('error',()=>{});   // "peer-unavailable" just means that slot is empty
   lister.on('open',()=>{
     for(let i=0;i<12;i++){const c=lister.connect('mhdir-'+i,{reliable:true});const t=setTimeout(()=>{try{c.close()}catch(e){}},4000);
       c.on('open',()=>c.send({t:'peek'}));
@@ -1354,7 +1370,7 @@ function scanServers(){
     setTimeout(()=>{paintServers(found,true);try{lister.destroy()}catch(e){}},4500)});
 }
 $('srvRefresh').onclick=scanServers;
-setInterval(()=>{if(!entered&&!roomClosed&&!document.hidden)scanServers()},30000);
+setInterval(()=>{if(!entered&&!roomClosed&&!document.hidden)scanServers()},60000);
 scanServers();
 
 /* ===== auto-resume after reload or discarded tab (host restores the saved game) ===== */
