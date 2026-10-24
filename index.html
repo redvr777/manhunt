@@ -937,7 +937,7 @@ function tick(){
 setInterval(()=>{if(entered&&state)drawMap()},5000);
 
 /* ===== map ===== */
-function initMap(){map=L.map('map',{zoomControl:false,preferCanvas:true,fadeAnimation:false,markerZoomAnimation:false}).setView([39,-98],4);L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap',updateWhenIdle:true,keepBuffer:1}).addTo(map);
+function initMap(){map=L.map('map',{zoomControl:false,fadeAnimation:false,markerZoomAnimation:false}).setView([39,-98],4);L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap',updateWhenIdle:true,keepBuffer:1}).addTo(map);
   L.control.zoom({position:'bottomleft'}).addTo(map);layerP=L.layerGroup().addTo(map);layerL=L.layerGroup().addTo(map);setTimeout(()=>map.invalidateSize(),200)}
 const rot=id=>{let h=0;for(const ch of String(id))h=(h*31+ch.charCodeAt(0))|0;return((Math.abs(h)%7)-3)+'deg'};
 const tape=(t,team,id)=>{const d=document.createElement('div');d.className='tape '+(team==='hider'?'th':'ts');d.textContent=t;d.style.setProperty('--rot',rot(id||t));return d};
@@ -978,7 +978,7 @@ function drawLiveNow(){
     L.marker([l.lat,l.lng],{icon:pinIcon(p,id===me.id?'you':ago(l.ts),id),interactive:false,zIndexOffset:500}).addTo(layerL)})}
 function fitMap(){if(!map||!state)return false;const pts=[];Object.entries(live).forEach(([id,l])=>{const p=state.players[id];if(id===me.id||(p&&canSeeLive(me.team,p.team)))pts.push([l.lat,l.lng])});
   if(me.team==='seeker')(state.areas||[]).forEach(a=>pts.push([a.clat,a.clng]));if(meMarker)pts.push(meMarker.getLatLng());
-  if(pts.length===1)map.setView(pts[0],16);else if(pts.length>1)map.fitBounds(pts,{padding:[90,90]});return pts.length>0}
+  if(pts.length===1)map.setView(pts[0],16);else if(pts.length>1)map.fitBounds(pts,{padding:[90,90],maxZoom:17});return pts.length>0}
 $('fit').onclick=fitMap;
 $('locme').onclick=()=>getFix(p=>{const ll=[p.coords.latitude,p.coords.longitude];if(meMarker)meMarker.setLatLng(ll);else meMarker=L.circleMarker(ll,{radius:8,color:'#fff',weight:2,fillColor:'#3ecf8e',fillOpacity:1}).addTo(map);map.setView(ll,17)},c=>toast(geoHelp(c),9000));
 $('testLoc').onclick=()=>{const e=$('geoStatus');e.textContent='Checking…';getFix(p=>{e.textContent='Location works (within '+Math.round(p.coords.accuracy)+' m).'},c=>{e.textContent=geoHelp(c)})};
@@ -1056,7 +1056,8 @@ function seekerPulse(s){
   if(s.status==='lobby')seenAreas.clear();
   if(me.team==='seeker'&&s.status==='running')(s.areas||[]).forEach(a=>{
     const k=a.clat.toFixed(5)+a.clng.toFixed(5)+a.m.map(x=>x.id+':'+x.n).join(',');
-    if(!seenAreas.has(k)){seenAreas.add(k);pulse([a.clat,a.clng],HC,RAD*.25,RAD*1.7)}})}
+    if(!seenAreas.has(k)){seenAreas.add(k);pulse([a.clat,a.clng],HC,RAD*.25,RAD*1.7);
+      if(map&&!map.getBounds().contains([a.clat,a.clng])){fitted=true;fitMap()}}})}   // a new hider circle is off screen: zoom out to include it
 document.addEventListener('keydown',e=>{if(e.code==='Space'&&!e.repeat&&!['INPUT','BUTTON'].includes(document.activeElement.tagName)){e.preventDefault();talk(true)}});
 document.addEventListener('keyup',e=>{if(e.code==='Space')talk(false)});
 
