@@ -3,166 +3,276 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Manhunt HQ</title>
+<meta name="theme-color" content="#0d0f13">
+<title>Manhunt</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anybody:wdth,wght@50..150,100..900&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0f1318;--panel:#171d25;--line:#2a3441;--text:#e8edf3;--mute:#8896a7;--hider:#ff5a4f;--seeker:#4aa8ff;--ok:#3ecf8e}
-*{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-button,input,select{font:inherit;color:inherit}
+/* Two teams, two skins. Ember = hiders, ice = seekers. Everything reads its colors from the body theme. */
+:root{--hc:#ff5b1f;--sc:#4cc9ff;--dockH:calc(100px + env(safe-area-inset-bottom));--disp:'Anybody','Arial Narrow',Impact,sans-serif;--body:'Karla',system-ui,sans-serif}
+body[data-theme=neutral]{--bg:#101216;--sf:#1a1d24;--sf2:#272b34;--tx:#f1f0ec;--mute:#8f94a0;--ac:#f1f0ec;--on:#101216;--ac2:#c9c6bb;--map:invert(1) grayscale(1) brightness(.8) contrast(1.2)}
+body[data-theme=hider]{--bg:#160a0a;--sf:#231110;--sf2:#351b16;--tx:#ffeadb;--mute:#b98f7f;--ac:#ff5b1f;--on:#1a0600;--ac2:#ffb03a;--map:invert(1) grayscale(1) sepia(1) hue-rotate(-18deg) saturate(2.4) brightness(.85) contrast(1.2)}
+body[data-theme=seeker]{--bg:#06141b;--sf:#0c212b;--sf2:#133140;--tx:#e2f6ff;--mute:#7fa6b6;--ac:#4cc9ff;--on:#031219;--ac2:#ffffff;--map:invert(1) grayscale(1) sepia(1) hue-rotate(150deg) saturate(2.1) brightness(.85) contrast(1.2)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font:16px/1.4 var(--body);transition:background .6s}
+button,input{font:inherit;color:inherit}
 .hidden{display:none!important}
-#join{max-width:420px;margin:0 auto;padding:max(24px,env(safe-area-inset-top)) 20px 40px}
-h1{font-size:28px;margin:16px 0 4px;letter-spacing:.5px}
-.sub{color:var(--mute);margin:0 0 22px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
-label.l{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--mute);margin:10px 0 6px}
-input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#0f141b}
-.btn{width:100%;padding:13px;border:0;border-radius:10px;background:var(--seeker);color:#04101c;font-weight:700;cursor:pointer;margin-top:12px}
-.btn.alt{background:#232c38;color:var(--text);border:1px solid var(--line)}
-.btn.red{background:var(--hider);color:#1c0503}
-.btn.sm{margin:0;padding:7px 11px;width:auto}
-.row{display:flex;gap:8px;align-items:center}
-.row>*{flex:1}
-.av{border-radius:50%;overflow:hidden;background:#2a3441;border:3px solid #556;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;flex:0 0 auto}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:5000;opacity:.09;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+
+/* shared bits */
+.btn{display:block;width:100%;padding:14px 16px;border:0;border-radius:16px 4px 16px 4px;background:var(--ac);color:var(--on);font:800 17px var(--disp);font-variation-settings:'wdth' 100;letter-spacing:.01em;cursor:pointer}
+.btn:active{transform:translateY(1px)}
+.btn.ghost{background:var(--sf2);color:var(--tx)}
+.btn.hot{background:var(--hc);color:#1a0600}
+.btn.sm{width:auto;padding:8px 12px;font-size:14px}
+.row{display:flex;gap:10px;align-items:flex-end}
+.row>*{flex:1;min-width:0}
+.small{font-size:13px;color:var(--mute)}
+label.l{display:block;font-size:13px;color:var(--mute);margin:12px 0 4px}
+input[type=text],input[type=number]{width:100%;padding:8px 0;border:0;border-bottom:2px solid var(--sf2);border-radius:0;background:transparent;font:700 22px var(--body)}
+input[type=text]:focus,input[type=number]:focus{outline:none;border-bottom-color:var(--ac)}
+input[type=checkbox]{accent-color:var(--ac);width:18px;height:18px;vertical-align:-3px;margin-right:8px}
+.ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;display:block}
+.av{border-radius:50%;overflow:hidden;background:var(--sf2);display:flex;align-items:center;justify-content:center;font:800 16px var(--disp);color:var(--tx);flex:0 0 auto;--ring:#667;box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ring)}
 .av img{width:100%;height:100%;object-fit:cover;display:block}
-.av.h{border-color:var(--hider)}.av.s{border-color:var(--seeker)}
-#picPrev{width:72px;height:72px;font-size:28px;flex:0 0 72px}
-#app{display:flex;flex-direction:column;height:100dvh}
-#top{display:flex;align-items:center;justify-content:space-between;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;background:var(--panel);border-bottom:1px solid var(--line);gap:8px}
-#top b{font-size:16px}
-.chip{padding:3px 9px;border-radius:99px;border:1px solid var(--line);font-size:12px;color:var(--mute)}
-#map{flex:1;min-height:200px}
-#panel{background:var(--panel);border-top:1px solid var(--line);padding:12px 12px calc(12px + env(safe-area-inset-bottom));max-height:55dvh;overflow:auto}
-#count{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
-#countlbl{color:var(--mute);font-size:13px}
-#teambar{display:flex;align-items:center;gap:10px;margin-bottom:6px;padding:8px 10px;border-radius:10px;font-weight:800;letter-spacing:.5px}
-#teambar.h{background:#ff5a4f26;color:var(--hider)}
-#teambar.s{background:#4aa8ff26;color:var(--seeker)}
-#teambar span{flex:1}
-#players{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px}
-#players li{background:#0f141b;border:1px solid var(--line);border-radius:9px;padding:6px 8px;font-size:14px;display:flex;align-items:center;gap:7px}
-#players li .nm2{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#players li.off{opacity:.45}
+.av.h{--ring:var(--hc)}.av.s{--ring:var(--sc)}
+
+/* join screen: the two teams meeting on a diagonal */
+#join{position:relative;min-height:100dvh;overflow:hidden;background:linear-gradient(112deg,#2a0f06 0 47%,#0d0f13 47% 53%,#06222d 53% 100%)}
+#join::before{content:'';position:absolute;left:50%;top:-10%;width:2px;height:130%;background:linear-gradient(#0000,#f1f0ec55,#0000);transform:rotate(12deg);transform-origin:center}
+.jin{position:relative;max-width:460px;margin:0 auto;padding:calc(34px + env(safe-area-inset-top)) 22px 40px;display:flex;flex-direction:column;gap:22px}
+.logo{position:relative;margin:0;font:900 clamp(52px,16vw,76px)/.9 var(--disp);font-variation-settings:'wdth' 120,'wght' 900;letter-spacing:-.01em;height:1em}
+.logo .lg{position:absolute;left:0;top:0;white-space:nowrap}
+.logo .e{color:var(--hc);clip-path:polygon(0 -10%,52% -10%,40% 110%,0 110%)}
+.logo .i{color:var(--sc);clip-path:polygon(52% -10%,110% -10%,110% 110%,40% 110%)}
+.tag{margin:0;color:#c8c5bb;font-size:17px;max-width:30ch}
+.well{background:#0d0f13cc;border-radius:22px 6px 22px 6px;padding:18px}
+.pickrow{display:flex;gap:16px;align-items:center}
+#picPrev{width:76px;height:76px;font-size:30px;--ring:#f1f0ec;cursor:pointer}
+.pickbtn{display:inline-block;padding:8px 12px;border-radius:12px 3px 12px 3px;background:#272b34;font-weight:700;cursor:pointer}
+.codeIn{font:900 34px var(--disp)!important;font-variation-settings:'wdth' 125;letter-spacing:.35em;text-transform:uppercase;text-align:center;padding-left:.35em!important}
+#insecure{background:#3a1209;border-left:4px solid var(--hc);color:#ffcdb8;padding:12px 14px;border-radius:4px 14px 4px 14px;font-size:14px}
+#join .btn{background:#f1f0ec;color:#101216}
+#join .btn.ghost{background:#272b34;color:#f1f0ec}
+
+/* in-game: full-bleed map, HUD on top, radio dock below */
+#app{position:fixed;inset:0;background:var(--bg)}
+#map{position:absolute;inset:0;background:var(--bg)}
+body[data-theme] .leaflet-tile-pane{filter:var(--map);transition:filter .9s}
+#veil{position:absolute;left:0;right:0;top:0;height:210px;background:linear-gradient(var(--bg),var(--bg) 18%,#0000);opacity:.92;pointer-events:none;z-index:500}
+#veilB{position:absolute;left:0;right:0;bottom:0;height:170px;background:linear-gradient(#0000,var(--bg));opacity:.9;pointer-events:none;z-index:500}
+#hud{position:absolute;left:0;right:0;top:0;padding:calc(10px + env(safe-area-inset-top)) 12px 0;z-index:600;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;pointer-events:none}
+#hud>*{pointer-events:auto}
+#left{min-width:0}
+#roomTag{display:flex;gap:8px;align-items:center;font-weight:700}
+#roomcode{font:900 18px var(--disp);font-variation-settings:'wdth' 120;letter-spacing:.14em}
+#status{font-size:13px;color:var(--on);background:var(--ac);padding:1px 9px;border-radius:9px 2px 9px 2px;font-weight:700}
+#countlbl{margin-top:8px;font-size:14px;color:var(--mute)}
+#count{font:900 clamp(70px,24vw,118px)/.82 var(--disp);font-variation-settings:'wdth' 100,'wght' 900;font-variant-numeric:tabular-nums;color:var(--tx);text-shadow:0 2px 24px var(--bg);letter-spacing:-.01em}
+#count.urgent{color:var(--ac);animation:squeeze 1s ease-in-out infinite}
+@keyframes squeeze{0%,100%{font-variation-settings:'wdth' 75,'wght' 900}50%{font-variation-settings:'wdth' 140,'wght' 900}}
+#tools{display:flex;flex-direction:column;gap:8px}
+.tool{position:relative;width:42px;height:42px;border:0;border-radius:14px 4px 14px 4px;background:#0009;backdrop-filter:blur(6px);color:var(--tx);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.tool:active{background:var(--ac);color:var(--on)}
+.badge{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:10px 2px 10px 2px;background:var(--hc);color:#1a0600;font:800 12px/20px var(--disp);text-align:center}
+#flash{position:fixed;inset:0;pointer-events:none;z-index:650;opacity:0}
+#flash.go{animation:flash 1.2s ease-out}
+@keyframes flash{0%{opacity:1;box-shadow:inset 0 0 70px 22px var(--ac)}100%{opacity:0;box-shadow:inset 0 0 180px 70px var(--ac)}}
+
+#dock{position:absolute;left:0;right:0;bottom:0;z-index:800;padding:0 12px calc(12px + env(safe-area-inset-bottom));display:flex;gap:10px}
+#ptt{flex:1;height:76px;border:0;border-radius:26px 6px 26px 6px;background:var(--ac);color:var(--on);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:pointer;transition:background .15s,transform .1s}
+#pttTxt{font:900 24px/1 var(--disp);font-variation-settings:'wdth' 110,'wght' 900;letter-spacing:.01em}
+#pttSub{font-size:13px;font-weight:700;opacity:.75}
+#ptt.live{background:var(--ac2);transform:scale(.985);animation:onair 1s ease-out infinite}
+@keyframes onair{0%{box-shadow:0 0 0 0 var(--ac)}100%{box-shadow:0 0 0 22px #0000}}
+#sheetBtn{position:relative;width:76px;height:76px;border:0;border-radius:6px 26px 6px 26px;background:var(--sf2);color:var(--tx);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer}
+#sheetBtn span{font:800 13px var(--disp)}
+
+#sheet{position:absolute;left:0;right:0;bottom:var(--dockH);z-index:700;max-height:min(62dvh,calc(100dvh - var(--dockH) - 120px));overflow:auto;background:var(--sf);border-radius:26px 6px 0 0;padding:10px 16px 18px;transform:translateY(calc(100% + var(--dockH)));transition:transform .4s cubic-bezier(.2,.85,.2,1);box-shadow:0 -12px 40px #000a}
+#sheet.open{transform:none}
+#grab{width:44px;height:5px;border-radius:3px;background:var(--sf2);margin:0 auto 12px}
+#teambar{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:18px 4px 18px 4px;background:var(--sf2)}
+#teambar .nmb{flex:1;font:900 20px/1.1 var(--disp);font-variation-settings:'wdth' 105}
+#rule{margin:10px 0 4px;color:var(--mute);font-size:14px;max-width:60ch}
+#actions{display:flex;gap:8px;margin-top:12px}
+#actions .btn{margin:0}
+#players{list-style:none;margin:14px 0 0;padding:0}
+#players li{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--sf2)}
+#players li .who{flex:1;min-width:0}
+#players li .nm2{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#players li .sub2{font-size:13px;color:var(--mute)}
+#players li.off{opacity:.4}
 #players li.tap{cursor:pointer}
-#ptt{width:100%;padding:20px;border-radius:14px;border:2px solid var(--line);background:#232c38;font-weight:800;font-size:17px;margin-top:12px;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
-#ptt.live{background:var(--ok);color:#03150d;border-color:var(--ok)}
-#toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:#000d;border:1px solid var(--line);padding:9px 14px;border-radius:10px;z-index:1000;max-width:90vw;text-align:center}
-.small{font-size:12px;color:var(--mute)}
-#insecure{background:#ff5a4f26;border:1px solid var(--hider);color:#ffb3ad;border-radius:12px;padding:12px;margin-bottom:14px;font-size:14px}
-/* map markers */
-.nm{background:#000c;color:#fff;font-size:12px;font-weight:700;padding:1px 7px;border-radius:6px;max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
-.tm{font-size:10px;color:#fff;background:#000a;padding:0 5px;border-radius:5px;margin-top:2px;white-space:nowrap}
-.pin{width:110px;display:flex;flex-direction:column;align-items:center;pointer-events:none}
-.pinc{display:flex;flex-direction:column;align-items:center;pointer-events:none}
-.crow{display:flex;gap:6px;justify-content:center}
-.ccol{display:flex;flex-direction:column;align-items:center;width:58px}
-.ccol .nm{max-width:58px}
-.rad{font-size:11px;font-weight:700;color:#fff;background:#ff5a4fdd;padding:1px 8px;border-radius:6px;margin-top:3px;white-space:nowrap}
-.rad.dim{background:#000a;border:1px dashed #ff5a4f}
-#chatBtn{position:relative}
-.badge{background:var(--hider);color:#fff;border-radius:99px;font-size:11px;padding:0 6px;margin-left:5px;font-weight:800}
-#chat{position:fixed;left:0;right:0;bottom:0;height:62dvh;background:var(--panel);border-top:2px solid var(--line);z-index:900;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -10px 30px #0009}
-#chatHead{display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--line);align-items:center}
-.tab{flex:1;padding:9px;border-radius:9px;border:1px solid var(--line);background:#0f141b;font-weight:700;cursor:pointer;position:relative}
-.tab.h.on{background:var(--hider);color:#1c0503;border-color:var(--hider)}
-.tab.s.on{background:var(--seeker);color:#04101c;border-color:var(--seeker)}
-.tab.all.on{background:var(--ok);color:#03150d;border-color:var(--ok)}
-.dotu{position:absolute;top:5px;right:7px;width:9px;height:9px;border-radius:50%;background:#fff;border:1px solid #000}
-#chatList{flex:1;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
-.msg{display:flex;gap:8px;align-items:flex-start}
+.tg{font-weight:800;font-size:13px}.tg.h{color:var(--hc)}.tg.s{color:var(--sc)}
+
+#toast{position:fixed;left:50%;bottom:calc(var(--dockH) + 12px);transform:translateX(-50%);z-index:4000;background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:14px 4px 14px 4px;max-width:calc(100vw - 24px);font-weight:700;text-align:center;box-shadow:0 8px 30px #0008}
+
+/* map markers: name on a strip of tape, picture below */
+.pin,.pinc{display:flex;flex-direction:column;align-items:center;pointer-events:none}
+.pin{width:120px}
+.tape{position:relative;padding:2px 10px;margin-bottom:4px;font:800 12px/1.25 var(--body);color:#1a0f08;white-space:nowrap;max-width:112px;overflow:hidden;text-overflow:ellipsis;transform:rotate(var(--rot,0deg));clip-path:polygon(0 0,100% 0,98% 28%,100% 52%,98% 76%,100% 100%,0 100%,2% 76%,0 52%,2% 28%);box-shadow:0 2px 0 #0004}
+.tape.th{background:#ff9a52}.tape.ts{background:#9de3ff}
+.tm{margin-top:3px;font-size:11px;font-weight:700;color:#fff;background:#000b;padding:0 7px;border-radius:7px 2px 7px 2px;white-space:nowrap}
+.av.self{animation:self 2s ease-out infinite}
+@keyframes self{0%{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ring),0 0 0 4px #fff8}100%{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ring),0 0 0 22px #fff0}}
+.crow{display:flex;gap:8px;justify-content:center}
+.ccol{display:flex;flex-direction:column;align-items:center;width:62px}
+.ccol .tape{max-width:62px}
+.rad{margin-top:6px;padding:3px 10px;border-radius:10px 3px 10px 3px;background:#1a0600e6;color:#ffb089;font-size:12px;font-weight:700;text-align:center;line-height:1.25;white-space:nowrap}
+.rad b{display:block;color:#fff;font:800 13px var(--disp)}
+.rad.dim{background:#000a;color:#ffb089}
+.area-ring{stroke-dasharray:12 9;animation:march 14s linear infinite}
+@keyframes march{to{stroke-dashoffset:-210}}
+.leaflet-container{font-family:var(--body);background:var(--bg)}
+.leaflet-bottom{margin-bottom:calc(var(--dockH) + 4px)}
+.leaflet-bar a,.leaflet-bar a:hover{background:var(--sf);color:var(--tx);border-bottom-color:var(--sf2)}
+.leaflet-control-attribution{background:#000a!important;color:#aab!important;font-size:10px}
+.leaflet-control-attribution a{color:#cde!important}
+
+/* chat */
+#chat{position:fixed;left:0;right:0;bottom:0;height:66dvh;background:var(--sf);border-radius:26px 6px 0 0;z-index:3500;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -14px 40px #000b}
+#chatHead{display:flex;gap:8px;padding:12px 12px 8px;align-items:center}
+.tab{flex:1;position:relative;padding:10px;border:0;border-radius:14px 3px 14px 3px;background:var(--sf2);color:var(--mute);font:800 15px var(--disp);cursor:pointer}
+.tab.on{color:#1a0600;background:var(--tx)}
+.tab.h.on{background:var(--hc)}.tab.s.on{background:var(--sc);color:#031219}
+.dotu{position:absolute;top:6px;right:8px;width:9px;height:9px;border-radius:50%;background:var(--hc);box-shadow:0 0 0 2px var(--sf)}
+#chatList{flex:1;overflow:auto;padding:8px 14px;display:flex;flex-direction:column;gap:10px}
+.msg{display:flex;gap:10px;align-items:flex-start}
 .msg.mine{flex-direction:row-reverse}
-.msg .b{background:#0f141b;border:1px solid var(--line);border-radius:10px;padding:5px 10px;max-width:78%;word-break:break-word}
-.msg.mine .b{background:#232c38}
-.msg .who{font-size:11px;font-weight:700;margin-bottom:1px}
-.msg .who.h{color:var(--hider)}.msg .who.s{color:var(--seeker)}
-.empty{color:var(--mute);text-align:center;margin-top:30px;font-size:14px}
-#chatForm{display:flex;gap:8px;padding:8px;border-top:1px solid var(--line)}
-#chatForm input{flex:1}
+.msg .b{background:var(--sf2);border-radius:14px 14px 14px 3px;padding:6px 12px;max-width:78%;word-break:break-word}
+.msg.mine .b{background:var(--ac);color:var(--on);border-radius:14px 14px 3px 14px}
+.msg .who{font-size:12px;font-weight:800}
+.msg .who.h{color:var(--hc)}.msg .who.s{color:var(--sc)}
+.msg.mine .who{color:var(--on);opacity:.7}
+.empty{color:var(--mute);text-align:center;margin-top:36px}
+#chatForm{display:flex;gap:10px;padding:8px 12px 12px;align-items:flex-end}
+#chatForm input{flex:1;font-size:18px}
+#chatForm .btn{width:auto}
+
+/* role reveal: the one big moment */
+#reveal{position:fixed;inset:0;z-index:3000;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;cursor:pointer;background:var(--rbg);color:var(--rfg);clip-path:circle(0% at 50% 58%)}
+#reveal[data-t=hider]{--rbg:#ff5b1f;--rfg:#1a0600}
+#reveal[data-t=seeker]{--rbg:#4cc9ff;--rfg:#031219}
+#reveal::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(135deg,#0000 0 26px,#0000001c 26px 52px)}
+#reveal.show{animation:iris .75s cubic-bezier(.7,0,.2,1) forwards}
+#reveal.fade{opacity:0;transition:opacity .55s}
+@keyframes iris{to{clip-path:circle(150% at 50% 58%)}}
+#rvWord{position:relative;font:900 clamp(90px,27vw,200px)/.85 var(--disp);font-variation-settings:'wdth' 150,'wght' 900;animation:widen 1.2s cubic-bezier(.2,.9,.2,1) .25s both}
+@keyframes widen{from{font-variation-settings:'wdth' 50,'wght' 900;opacity:0}to{font-variation-settings:'wdth' 150,'wght' 900;opacity:1}}
+#rvSub{position:relative;margin-top:22px;font-size:19px;font-weight:700;max-width:26ch;animation:rise .6s ease .9s both}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before{animation:none!important;transition:none!important}
+  #reveal.show{clip-path:none}
+  #ptt.live{background:var(--ac2)}
+}
 </style>
 </head>
-<body>
+<body data-theme="neutral">
 
-<div id="join">
-  <h1>MANHUNT HQ</h1>
-  <p class="sub">Live team map, hider pings, team walkie-talkies.</p>
-  <div id="insecure" class="hidden"><b>⚠ Location and mic are blocked on this page.</b><br>Browsers only allow them when the site is opened over <b>https://</b> — not from a saved/downloaded file or plain http. Upload this file to Netlify Drop, GitHub Pages or Cloudflare Pages, then open that https link on every phone.</div>
-  <div class="card">
-    <div class="row" style="align-items:center">
-      <div class="av" id="picPrev" style="flex:0 0 72px"></div>
-      <div style="flex:1">
-        <label class="btn alt sm" style="display:inline-block;cursor:pointer;margin:0">Choose photo<input type="file" id="picIn" accept="image/*" hidden></label>
-        <div class="small" style="margin-top:6px">Saved on this device.</div>
+<section id="join">
+  <div class="jin">
+    <h1 class="logo" aria-label="Manhunt"><span class="lg e" aria-hidden="true">MANHUNT</span><span class="lg i" aria-hidden="true">MANHUNT</span></h1>
+    <p class="tag">Hide-and-seek on a live map, with a team radio and a chat.</p>
+    <div id="insecure" class="hidden"><b>Location and mic are blocked on this page.</b> Browsers only allow them over https. Upload this file to Netlify Drop, GitHub Pages or Cloudflare Pages and open that link on every phone.</div>
+    <div class="well">
+      <div class="pickrow">
+        <div class="av" id="picPrev"></div>
+        <div>
+          <label class="pickbtn">Add photo<input type="file" id="picIn" accept="image/*" hidden></label>
+          <div class="small" style="margin-top:6px">Stays on this phone.</div>
+        </div>
       </div>
+      <label class="l" for="name">Your name</label>
+      <input type="text" id="name" maxlength="16" placeholder="Jake" autocomplete="off">
     </div>
-    <label class="l">Your name</label>
-    <input type="text" id="name" maxlength="16" placeholder="e.g. Jake" autocomplete="off">
+    <button class="btn" id="create">Host a game</button>
+    <div class="well">
+      <label class="l" for="code" style="margin-top:0">Got a room code?</label>
+      <input type="text" id="code" class="codeIn" maxlength="4" placeholder="ABCD" autocomplete="off">
+      <button class="btn ghost" id="joinbtn" style="margin-top:14px">Join game</button>
+    </div>
+    <p class="small">During a game your live position goes to your own team only, and you can switch that off. Seekers never get exact spots for hiders, just a 0.2 mile circle at each ping. The mic opens only while you hold the radio button.</p>
   </div>
-  <div class="card">
-    <button class="btn" id="create" style="margin-top:0">Create a game (I'm the host)</button>
-  </div>
-  <div class="card">
-    <label class="l" style="margin-top:0">Or join with a room code</label>
-    <input type="text" id="code" maxlength="4" placeholder="ABCD" autocomplete="off" style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-size:20px">
-    <button class="btn alt" id="joinbtn">Join game</button>
-  </div>
-  <p class="small">While a game is running, your live location is shared with your own team only (you can switch it off). The other team never sees exact spots: seekers only get a rough 0.2-mile area for each hider at every ping. The mic is only live while you hold the talk button. Needs HTTPS.</p>
-</div>
+</section>
 
 <div id="app" class="hidden">
-  <div id="top">
-    <div><b id="roomcode"></b> <span class="chip" id="status"></span></div>
-    <div class="row" style="flex:0 0 auto">
-      <button class="btn alt sm" id="chatBtn">💬<span id="chatBadge" class="badge hidden">0</span></button>
-      <button class="btn alt sm" id="share">Share</button>
-      <button class="btn alt sm" id="fit">Fit</button>
-      <button class="btn alt sm" id="locme">Me</button>
-    </div>
-  </div>
   <div id="map"></div>
-  <div id="panel">
-    <div id="teambar" class="h"><div class="av" id="meAv" style="width:34px;height:34px"></div><span id="teamTxt"></span>
-      <label class="btn alt sm" style="cursor:pointer;font-weight:600">Photo<input type="file" id="picIn2" accept="image/*" hidden></label></div>
-    <div class="small" id="rule"></div>
-    <label class="small" style="display:block;margin:6px 0"><input type="checkbox" id="liveToggle" checked> Share my live location with my team during the game</label>
-    <div id="countlbl">Waiting to start</div>
-    <div id="count">--:--</div>
+  <div id="veil"></div><div id="veilB"></div>
+  <div id="flash"></div>
+
+  <header id="hud">
+    <div id="left">
+      <div id="roomTag"><span id="roomcode"></span><span id="status"></span></div>
+      <div id="countlbl">Waiting to start</div>
+      <div id="count">--:--</div>
+    </div>
+    <div id="tools">
+      <button class="tool" id="chatBtn" aria-label="Chat"><svg class="ic" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span id="chatBadge" class="badge hidden">0</span></button>
+      <button class="tool" id="share" aria-label="Share invite link"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5M5 14v6h14v-6"/></svg></button>
+      <button class="tool" id="fit" aria-label="Fit map to everyone"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button class="tool" id="locme" aria-label="Show where I am"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
+    </div>
+  </header>
+
+  <div id="sheet">
+    <div id="grab"></div>
+    <div id="teambar">
+      <div class="av" id="meAv" style="width:40px;height:40px"></div>
+      <div class="nmb" id="teamTxt"></div>
+      <label class="btn ghost sm" style="cursor:pointer;margin:0">Photo<input type="file" id="picIn2" accept="image/*" hidden></label>
+    </div>
+    <div id="rule"></div>
+    <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="liveToggle" checked>Share my live location with my team during the game</label>
 
     <div id="lobbyBox">
-      <button class="btn alt" id="testLoc" style="margin-top:8px">📍 Test my location</button>
+      <button class="btn ghost" id="testLoc" style="margin-top:6px">Test my location</button>
       <div class="small" id="geoStatus" style="margin-top:6px"></div>
       <div id="hostSettings" class="hidden">
         <div class="row" style="margin-top:6px">
           <div><label class="l">Seekers</label><input type="number" id="seekN" value="1" min="0" max="20"></div>
-          <div><label class="l">Hide (min)</label><input type="number" id="hideMin" value="10" min="0" max="120"></div>
-          <div><label class="l">Ping (min)</label><input type="number" id="pingMin" value="5" min="1" max="60"></div>
+          <div><label class="l">Hide minutes</label><input type="number" id="hideMin" value="10" min="0" max="120"></div>
+          <div><label class="l">Ping every</label><input type="number" id="pingMin" value="5" min="1" max="60"></div>
         </div>
-        <button class="btn alt" id="rand">🎲 Randomize teams</button>
-        <button class="btn" id="start">Start game</button>
-        <div class="small" style="margin-top:6px">Tap a player below to flip their team by hand.</div>
+        <div id="actions0" style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn ghost" id="rand">Randomize teams</button>
+          <button class="btn" id="start">Start game</button>
+        </div>
+        <div class="small" style="margin-top:8px">Tap a player below to flip their team by hand.</div>
       </div>
-      <div id="guestWait" class="small" style="margin-top:10px">Waiting for the host to pick teams and start…</div>
+      <div id="guestWait" class="small" style="margin-top:12px">Waiting for the host to pick teams and start.</div>
     </div>
 
-    <div class="row" style="margin-top:8px">
-      <button class="btn alt hidden" id="pingNow">Ping now</button>
-      <button class="btn red hidden" id="end">End game</button>
-      <button class="btn alt hidden" id="again">New round</button>
+    <div id="actions">
+      <button class="btn ghost hidden" id="pingNow">Ping now</button>
+      <button class="btn hot hidden" id="end">End game</button>
+      <button class="btn hidden" id="again">New round</button>
     </div>
-
-    <button id="ptt">HOLD TO TALK (team radio)</button>
-    <div class="small" id="micnote" style="margin-top:6px"></div>
+    <div class="small" id="micnote" style="margin-top:8px"></div>
     <ul id="players"></ul>
   </div>
+
+  <div id="dock">
+    <button id="ptt"><span id="pttTxt">Hold to talk</span><span id="pttSub">Team radio</span></button>
+    <button id="sheetBtn" aria-label="Players and game controls"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6M17 5a3 3 0 010 6M19 14c1.7.7 2.8 2.4 3 5"/></svg><span id="sheetCount">1</span></button>
+  </div>
 </div>
+
 <div id="chat" class="hidden">
   <div id="chatHead">
     <button class="tab" id="tabTeam"><span id="tabTeamTxt">Team</span><i id="dotTeam" class="dotu hidden"></i></button>
     <button class="tab all" id="tabAll"><span>Everyone</span><i id="dotAll" class="dotu hidden"></i></button>
-    <button class="btn alt sm" id="chatClose">✕</button>
+    <button class="btn ghost sm" id="chatClose" aria-label="Close chat">Close</button>
   </div>
   <div id="chatList"></div>
-  <form id="chatForm"><input type="text" id="chatIn" maxlength="200" placeholder="Message…" autocomplete="off"><button class="btn sm" type="submit">Send</button></form>
+  <form id="chatForm"><input type="text" id="chatIn" maxlength="200" placeholder="Message" autocomplete="off"><button class="btn sm" type="submit">Send</button></form>
 </div>
+
+<div id="reveal" class="hidden"><div id="rvWord"></div><div id="rvSub"></div></div>
 <div id="toast" class="hidden"></div>
 <div id="audios"></div>
 
@@ -173,8 +283,8 @@ input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;b
 const CFG = { photonPunAppId:'e311f009-c6be-433f-bda5-ee47fe131d88', photonVoiceAppId:'03e1ff28-3112-4a10-a254-8230478e742e' };
 const RADIUS_M = 321.87;      // 0.2 mile — the area seekers see for each hider
 const FUZZ_M = 160;           // true spot is somewhere inside the circle, not at its center
-const CLUSTER_M = 180;        // hider circles closer than this are shown as one shared circle
 const STILL_M = 100;          // moved less than this since last ping = same circle
+const HC = '#ff5b1f', SC = '#4cc9ff';
 
 const $ = id => document.getElementById(id);
 const me = { id:null, name:'', team:'hider', isHost:false, code:'', pic:null };
@@ -183,6 +293,8 @@ let lastPingN = null, firstState = true, entered = false, migrating = false, tic
 let liveStore = {};           // host only: latest live fix for everyone
 let live = {};                // what this device may see: live fixes of my own team
 let watchId = null, lastFix = null, lastSent = 0, watchErrShown = false;
+let prevStatus = null, sheetOpen = false;
+const seenAreas = new Set();
 const conns = {}, calls = {}, audioEls = {};
 let map, layerPings, layerLive, meMarker, fitted = false;
 const store = { get:k=>{ try{return localStorage.getItem(k)}catch(e){return null} }, set:(k,v)=>{ try{localStorage.setItem(k,v)}catch(e){} } };
@@ -191,14 +303,14 @@ const store = { get:k=>{ try{return localStorage.getItem(k)}catch(e){return null
 function toast(msg, ms=3500){ const t=$('toast'); t.textContent=msg; t.classList.remove('hidden'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.add('hidden'),ms); }
 function fmt(ms){ ms=Math.max(0,Math.ceil(ms/1000)); const m=Math.floor(ms/60), s=ms%60; return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
 function ago(ts){ const s=Math.max(0,Math.round((Date.now()+skew-ts)/1000)); return s<60 ? s+'s ago' : Math.round(s/60)+' min ago'; }
-function beep(){ try{ const c=new (window.AudioContext||window.webkitAudioContext)(); const o=c.createOscillator(), g=c.createGain(); o.connect(g); g.connect(c.destination); o.frequency.value=880; g.gain.value=.15; o.start(); o.stop(c.currentTime+.35);}catch(e){} if(navigator.vibrate) navigator.vibrate([200,100,200]); }
+function beep(){ try{ const c=new (window.AudioContext||window.webkitAudioContext)(); const o=c.createOscillator(), g=c.createGain(); o.connect(g); g.connect(c.destination); o.type='triangle'; o.frequency.setValueAtTime(660,c.currentTime); o.frequency.exponentialRampToValueAtTime(990,c.currentTime+.18); g.gain.setValueAtTime(.18,c.currentTime); g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.45); o.start(); o.stop(c.currentTime+.45);}catch(e){} if(navigator.vibrate) navigator.vibrate([200,100,200]); }
 async function getMic(){
   try{
     localStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
     localStream.getAudioTracks().forEach(t=>t.enabled=false);
   }catch(e){
     localStream = new MediaStream();
-    $('micnote').textContent='Mic unavailable — you can listen but not talk. Allow microphone access and rejoin.';
+    $('micnote').textContent='Mic unavailable. You can listen but not talk. Allow microphone access and rejoin.';
   }
 }
 // ---- location diagnostics ----
@@ -206,8 +318,8 @@ const secureOk = window.isSecureContext && location.protocol !== 'file:';
 if(!secureOk) $('insecure').classList.remove('hidden');
 function geoErr(e){ if(!secureOk) return 'insecure'; if(!navigator.geolocation) return 'unsupported'; return e && e.code===1 ? 'denied' : e && e.code===2 ? 'unavailable' : e && e.code===3 ? 'timeout' : 'error'; }
 function geoHelp(c){ return ({
-  insecure:'This page must be opened over https:// (not a saved file or http). Host it on Netlify / GitHub Pages.',
-  denied:'Location is blocked. Allow it for this site in your browser settings, and make sure Location Services is on for your browser.',
+  insecure:'This page must be opened over https:// (not a saved file or http). Host it on Netlify or GitHub Pages.',
+  denied:'Location is blocked. Allow it for this site in your browser settings, and turn on Location Services for your browser.',
   unavailable:'No GPS fix available. Check Location Services is on, or step outside.',
   timeout:'Location took too long. Move to open sky and try again.',
   unsupported:'This browser has no location support.',
@@ -227,13 +339,14 @@ function resizeImg(file){ return new Promise((res,rej)=>{ const img=new Image(),
     x.drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,S,S); URL.revokeObjectURL(u); res(c.toDataURL('image/jpeg',.72)); };
   img.onerror=rej; img.src=u; }); }
 function avatar(p, size, team){
-  const d=document.createElement('div'); d.className='av'+(team?(team==='hider'?' h':' s'):''); d.style.width=d.style.height=size+'px'; d.style.fontSize=Math.round(size*.45)+'px';
+  const d=document.createElement('div'); d.className='av'+(team?(team==='hider'?' h':' s'):''); d.style.width=d.style.height=size+'px'; d.style.fontSize=Math.round(size*.42)+'px';
   if(validPic(p.pic)){ const i=document.createElement('img'); i.src=p.pic; d.appendChild(i); } else d.textContent=((p.name||'?')[0]||'?').toUpperCase();
   return d;
 }
-function paintPrev(){ const el=$('picPrev'); const a=avatar({name:$('name').value||'?',pic:me.pic},72); el.replaceChildren(...a.childNodes); el.style.fontSize='28px'; }
+function paintPrev(){ const el=$('picPrev'); const a=avatar({name:$('name').value||'?',pic:me.pic},76); el.replaceChildren(...a.childNodes); el.style.fontSize='30px'; }
 me.pic = store.get('mh_pic'); if(!validPic(me.pic)) me.pic=null;
 $('name').value = store.get('mh_name')||''; $('name').addEventListener('input',paintPrev); paintPrev();
+$('picPrev').onclick = () => $('picIn').click();
 async function onPic(e){
   const f=e.target.files[0]; if(!f) return;
   try{ me.pic = await resizeImg(f); store.set('mh_pic', me.pic); paintPrev(); if(entered){ send({t:'pic', pic:me.pic}); } }catch(err){ toast('Could not read that image'); }
@@ -302,13 +415,13 @@ function connectToHost(hostId, cb){
 // ---------- host migration ----------
 function onHostLost(){
   if(migrating || !state || me.isHost) return;
-  migrating = true; toast('Host left — choosing a new host…', 6000);
+  migrating = true; toast('Host left. Choosing a new host…', 6000);
   const old = state.hostId;
   const cands = state.order.filter(id => id!==old && state.players[id] && !state.players[id].off);
   tryCandidate(cands, 0, old);
 }
 function tryCandidate(cands, i, old){
-  if(i>=cands.length){ migrating=false; toast('No host available — game ended',10000); return; }
+  if(i>=cands.length){ migrating=false; toast('No host available. The game ended.',10000); return; }
   const id = cands[i];
   if(id===me.id){ promote(old); return; }
   let tries = 0;
@@ -395,6 +508,22 @@ function onLive(pid, d){
   Object.entries(conns).forEach(([cid,c]) => { if(cid!==pid && state.players[cid]?.team===p.team){ try{c.send(msg)}catch(e){} } });
   if(pid!==me.id && me.team===p.team){ if(d.t==='live') live[pid]=liveStore[pid]; else delete live[pid]; drawLive(); }
 }
+// One circle per group of hiders. A hider already inside an existing circle doesn't get their own;
+// every circle then lists ALL hiders whose last known spot is inside it. Centers come from each anchor's stored (fuzzed) center, so they stay put between broadcasts.
+function computeAreas(){
+  const lastFix = id => { const a=state.locs[id]||[]; for(let i=a.length-1;i>=0;i--) if(!a[i].err && a[i].lat!==undefined) return a[i]; return null; };
+  const hs = [];
+  state.order.forEach(id => {
+    const p = state.players[id]; if(!p || p.team!=='hider' || p.off) return;
+    const e = lastFix(id); if(e) hs.push({id, e, ll:L.latLng(e.lat,e.lng)});
+  });
+  const centers = [];
+  hs.forEach(h => { if(!centers.some(c => c.distanceTo(h.ll) <= RADIUS_M)) centers.push(L.latLng(h.e.clat, h.e.clng)); });
+  return centers.map(c => ({
+    clat:c.lat, clng:c.lng,
+    m: hs.filter(h => c.distanceTo(h.ll) <= RADIUS_M).map(h => ({id:h.id, n:h.e.n, ts:h.e.ts}))
+  }));
+}
 // what each team may see:
 //   hiders  -> exact pings + live positions of hiders
 //   seekers -> only a rough 0.2-mile circle per hider ping (no exact coordinates) + live positions of seekers
@@ -406,7 +535,7 @@ function viewFor(team){
   });
   const lv = {};
   Object.entries(liveStore).forEach(([id,l]) => { const p=state.players[id]; if(p && p.team===team) lv[id]=l; });
-  return Object.assign({}, state, {locs, live:lv, now:Date.now()});
+  return Object.assign({}, state, {locs, live:lv, areas:computeAreas(), now:Date.now()});
 }
 function broadcast(){
   Object.entries(conns).forEach(([cid,c]) => { try{ c.send({t:'state', s:viewFor(state.players[cid]?.team)}); }catch(e){} });
@@ -448,7 +577,7 @@ function applyState(s){
   state = s; skew = s.now - Date.now();
   const mine = s.players[me.id]; if(mine) me.team = mine.team;
   if(!entered){ entered = true; enterApp(); }
-  if(!firstState && lastPingN!==null && s.pingN > lastPingN){ beep(); toast(me.team==='hider' ? '📍 PING! Seekers got your rough area' : '📍 PING! Hider areas updated'); }
+  const pinged = !firstState && lastPingN!==null && s.pingN > lastPingN;
   lastPingN = s.pingN; firstState = false;
   if(s.status==='running'){
     keepAwake();
@@ -457,7 +586,20 @@ function applyState(s){
     if(own && (!live[me.id] || own.ts > live[me.id].ts)) live[me.id] = own;
     startWatch();
   } else { live = {}; stopWatch(); }
+  if(s.status!==prevStatus){
+    setSheet(s.status!=='running');
+    if(s.status==='running') showReveal();
+    if(s.status==='lobby') seenAreas.clear();
+  }
+  prevStatus = s.status;
   render(); syncCalls();
+  if(pinged){ beep(); pingFx(); toast(me.team==='hider' ? 'Ping. Seekers got a rough circle around you.' : 'Ping. Hider circles are updating.'); }
+  if(me.team==='seeker' && s.status==='running'){
+    (s.areas||[]).forEach(a => {
+      const k = a.clat.toFixed(5)+a.clng.toFixed(5)+a.m.map(x=>x.id+':'+x.n).join(',');
+      if(!seenAreas.has(k)){ seenAreas.add(k); pulse([a.clat,a.clng], HC, RADIUS_M*.25, RADIUS_M*1.7); }
+    });
+  }
 }
 
 // ---------- my location ----------
@@ -482,7 +624,6 @@ $('liveToggle').onchange = () => {
 // Ping: hiders only. Seekers see a rough 0.2-mile circle, built by the host.
 function doPing(){
   if(!state || state.status!=='running' || me.team!=='hider') return;
-  toast('Ping! Sharing a rough area of your location…');
   if(lastFix && Date.now()-lastFix.ts < 20000){ send({t:'loc', lat:lastFix.lat, lng:lastFix.lng, acc:lastFix.acc}); return; }
   getFix(
     p => send({t:'loc', lat:p.coords.latitude, lng:p.coords.longitude, acc:p.coords.accuracy}),
@@ -490,15 +631,48 @@ function doPing(){
   );
 }
 
+// ---------- effects ----------
+function pulse(ll, color, r0, r1, dur=1400){
+  if(!map) return;
+  const c = L.circle(ll,{radius:r0,color,weight:3,fill:false,interactive:false}).addTo(map);
+  const t0 = performance.now();
+  (function step(t){
+    const k = Math.min(1,(t-t0)/dur), e = 1-Math.pow(1-k,3);
+    c.setRadius(r0+(r1-r0)*e); c.setStyle({opacity:1-k});
+    if(k<1) requestAnimationFrame(step); else c.remove();
+  })(t0);
+}
+function pingFx(){
+  const f = $('flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+  if(me.team==='hider' && live[me.id]) pulse([live[me.id].lat, live[me.id].lng], HC, 8, RADIUS_M*1.2);
+}
+function showReveal(){
+  const r = $('reveal'), h = me.team==='hider';
+  r.dataset.t = me.team;
+  $('rvWord').textContent = h ? 'HIDE' : 'SEEK';
+  $('rvSub').textContent = h
+    ? 'Seekers get a 0.2 mile circle around you every '+state.pingMin+' min. Keep moving.'
+    : 'Hiders show up as 0.2 mile circles every '+state.pingMin+' min. Your team shows live.';
+  r.className = ''; void r.offsetWidth; r.classList.add('show');
+  if(navigator.vibrate) navigator.vibrate([120,60,120,60,300]);
+  clearTimeout(showReveal._a); clearTimeout(showReveal._b);
+  showReveal._a = setTimeout(() => r.classList.add('fade'), 3000);
+  showReveal._b = setTimeout(() => { r.className = 'hidden'; }, 3600);
+}
+$('reveal').onclick = () => { $('reveal').className = 'hidden'; };
+
 // ---------- render ----------
+function setSheet(o){ sheetOpen = o; $('sheet').classList.toggle('open', o); }
+$('sheetBtn').onclick = () => setSheet(!sheetOpen);
 function enterApp(){
   $('join').classList.add('hidden'); $('app').classList.remove('hidden');
-  $('roomcode').textContent = 'Room '+me.code;
+  $('roomcode').textContent = me.code;
   initMap();
 }
 function render(){
   const s = state, lobby = s.status==='lobby';
-  $('status').textContent = {lobby:'Lobby',running:'In progress',over:'Game over'}[s.status];
+  document.body.dataset.theme = lobby ? 'neutral' : me.team;
+  $('status').textContent = {lobby:'Lobby',running:'Live',over:'Over'}[s.status];
   $('hostSettings').classList.toggle('hidden', !(me.isHost && lobby));
   $('guestWait').classList.toggle('hidden', me.isHost || !lobby);
   $('lobbyBox').classList.toggle('hidden', !lobby);
@@ -506,21 +680,31 @@ function render(){
   $('pingNow').classList.toggle('hidden', !(me.isHost && s.status==='running'));
   $('again').classList.toggle('hidden', !(me.isHost && s.status==='over'));
 
-  $('teambar').className = me.team==='hider'?'h':'s';
-  $('teamTxt').textContent = 'YOU ARE A '+me.team.toUpperCase()+(me.isHost?' · HOST':'');
+  const role = me.team==='hider' ? 'hider' : 'seeker';
+  $('teamTxt').textContent = lobby ? 'Right now you are a '+role : (me.team==='hider' ? "You're hiding" : "You're seeking");
   $('rule').textContent = me.team==='hider'
-    ? `Your team sees you live. Seekers only see a rough 0.2-mile circle around each hider every ${s.pingMin} min.`
-    : `You see your fellow seekers live. Hiders show up as a 0.2-mile circle every ${s.pingMin} min.`;
-  const mine = s.players[me.id]||{name:me.name,pic:me.pic}; const a = avatar(mine,34,me.team); $('meAv').replaceChildren(...a.childNodes); $('meAv').className=a.className;
+    ? `Your team sees you live. Seekers only see a rough 0.2 mile circle around each hider every ${s.pingMin} min.`
+    : `You see your fellow seekers live. Hiders show up as a 0.2 mile circle every ${s.pingMin} min.`;
+  const mine = s.players[me.id]||{name:me.name,pic:me.pic}; const a = avatar(mine,40,me.team); $('meAv').replaceChildren(...a.childNodes); $('meAv').className=a.className;
+  $('pttSub').textContent = me.team==='hider' ? 'Hider radio' : 'Seeker radio';
+  $('sheetCount').textContent = Object.values(s.players).filter(p=>!p.off).length;
 
   const ul = $('players'); ul.innerHTML='';
   s.order.forEach(id => {
     const p = s.players[id]; if(!p) return;
     const li = document.createElement('li'); if(p.off) li.classList.add('off');
-    li.appendChild(avatar(p,24,p.team));
-    const n=document.createElement('span'); n.className='nm2'; n.textContent=(id===s.hostId?'👑 ':'')+p.name+(id===me.id?' (you)':'')+(p.off?' · offline':''); li.appendChild(n);
+    li.appendChild(avatar(p,38,p.team));
+    const who = document.createElement('div'); who.className='who';
+    const n = document.createElement('div'); n.className='nm2'; n.textContent = p.name+(id===me.id?' (you)':'');
+    const sub = document.createElement('div'); sub.className='sub2';
     const last = (s.locs[id]||[]).slice(-1)[0];
-    if(last){ const r=document.createElement('span'); r.className='small'; r.textContent = last.err ? 'no fix ('+last.err+')' : 'ping '+ago(last.ts); li.appendChild(r); }
+    const bits = [];
+    if(id===s.hostId) bits.push('host');
+    if(p.off) bits.push('offline');
+    else if(last) bits.push(last.err ? 'no fix ('+last.err+')' : 'ping '+ago(last.ts));
+    sub.textContent = bits.join(', ');
+    who.append(n, sub); li.appendChild(who);
+    const tg = document.createElement('span'); tg.className='tg '+(p.team==='hider'?'h':'s'); tg.textContent = p.team==='hider' ? 'Hider' : 'Seeker'; li.appendChild(tg);
     if(me.isHost && lobby){ li.classList.add('tap'); li.onclick = () => { state.players[id].team = state.players[id].team==='hider'?'seeker':'hider'; broadcast(); }; }
     ul.appendChild(li);
   });
@@ -528,82 +712,81 @@ function render(){
 }
 function tick(){
   if(!state) return;
-  const s = state, now = Date.now()+skew;
+  const s = state, now = Date.now()+skew, c = $('count');
+  let urgent = false;
   if(s.status==='running'){
-    $('countlbl').textContent = s.pingN===0 ? 'Hiders are hiding — first ping in' : 'Next ping in';
-    $('count').textContent = fmt(s.nextPing-now);
-  } else if(s.status==='over'){ $('countlbl').textContent='Game over'; $('count').textContent='--:--'; }
-  else { $('countlbl').textContent='Waiting to start'; $('count').textContent='--:--'; }
+    const rem = s.nextPing-now;
+    $('countlbl').textContent = s.pingN===0 ? (me.team==='hider' ? 'Time left to hide' : 'Hiders are hiding. First ping in') : 'Next ping in';
+    c.textContent = fmt(rem);
+    urgent = rem<=10000;
+  } else if(s.status==='over'){ $('countlbl').textContent='Game over'; c.textContent='--:--'; }
+  else { $('countlbl').textContent='Waiting to start'; c.textContent='--:--'; }
+  c.classList.toggle('urgent', urgent);
 }
 setInterval(tick, 500);
 setInterval(() => { if(entered && state) drawMap(); }, 5000);
 
 // ---------- map ----------
 function initMap(){
-  map = L.map('map').setView([39,-98],4);
+  map = L.map('map',{zoomControl:false}).setView([39,-98],4);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  L.control.zoom({position:'bottomleft'}).addTo(map);
   layerPings = L.layerGroup().addTo(map);
   layerLive = L.layerGroup().addTo(map);
   setTimeout(()=>map.invalidateSize(),200);
 }
-function pinIcon(p, tag){
+function rot(id){ let h=0; for(const ch of String(id)) h=(h*31+ch.charCodeAt(0))|0; return ((Math.abs(h)%7)-3)+'deg'; }
+function tape(text, team, id){
+  const t=document.createElement('div'); t.className='tape '+(team==='hider'?'th':'ts'); t.textContent=text; t.style.setProperty('--rot', rot(id||text)); return t;
+}
+function pinIcon(p, tag, id){
   const w=document.createElement('div'); w.className='pin';
-  const nm=document.createElement('div'); nm.className='nm'; nm.textContent=p.name;
+  const av=avatar(p,40,p.team); if(id===me.id) av.classList.add('self');
   const tm=document.createElement('div'); tm.className='tm'; tm.textContent=tag;
-  w.append(nm, avatar(p,36,p.team), tm);
-  return L.divIcon({html:w, className:'', iconSize:[110,72], iconAnchor:[55,38]});
+  w.append(tape(p.name,p.team,id), av, tm);
+  return L.divIcon({html:w, className:'', iconSize:[120,82], iconAnchor:[60,46]});
 }
 function clusterIcon(cl){
   const w=document.createElement('div'); w.className='pinc';
   const row=document.createElement('div'); row.className='crow';
-  cl.items.slice(0,6).forEach(it => {
+  const maxN = Math.max(...cl.items.map(i=>i.last.n));
+  cl.items.slice(0,8).forEach(it => {
     const col=document.createElement('div'); col.className='ccol';
-    const nm=document.createElement('div'); nm.className='nm'; nm.textContent=it.p.name;
-    col.append(nm, avatar(it.p,42,'hider')); row.appendChild(col);
+    col.append(tape(it.p.name,'hider',it.id), avatar(it.p,44,'hider'));
+    if(it.last.n < maxN){ const t=document.createElement('div'); t.className='tm'; t.textContent='ping '+it.last.n; col.appendChild(t); }
+    row.appendChild(col);
   });
-  const newest = Math.max(...cl.items.map(i=>i.last.ts)), n = Math.max(...cl.items.map(i=>i.last.n));
-  const lb=document.createElement('div'); lb.className='rad'; lb.textContent='.2 mile radius · ping #'+n+' · '+ago(newest);
+  const newest = Math.max(...cl.items.map(i=>i.last.ts)), k = cl.items.length;
+  const lb=document.createElement('div'); lb.className='rad';
+  const b=document.createElement('b'); b.textContent='.2 mile radius';
+  lb.append(b, document.createTextNode(k+(k===1?' hider':' hiders')+', ping '+maxN+', '+ago(newest)));
   w.append(row, lb);
-  const width = Math.max(150, Math.min(cl.items.length,6)*64);
-  return L.divIcon({html:w, className:'', iconSize:[width,96], iconAnchor:[width/2,48]});
+  const width = Math.max(180, Math.min(k,8)*70);
+  return L.divIcon({html:w, className:'', iconSize:[width,118], iconAnchor:[width/2,62]});
 }
 function drawMap(){ if(!map) return; drawPings(); drawLive(); if(!fitted && fitMap()) fitted = true; }
 
-// hider pings: a 0.2-mile circle (never an exact dot) with the hider's picture and name inside
+// hider pings: a 0.2-mile circle (never an exact dot) listing every hider inside it, with pictures and names
 function drawPings(){
   layerPings.clearLayers();
-  const items = [];
   Object.entries(state.locs).forEach(([id,arr]) => {
-    const p = state.players[id]; if(!p) return;
     const good = arr.filter(a => !a.err && a.clat!==undefined); if(!good.length) return;
-    items.push({id, p, good, last:good[good.length-1]});
+    const pts = good.map(a=>[a.clat,a.clng]);
+    if(pts.length>1) L.polyline(pts,{color:HC,weight:2,opacity:.35,dashArray:'4 7',interactive:false}).addTo(layerPings);
+    good.slice(0,-1).forEach(a => L.circleMarker([a.clat,a.clng],{radius:3,color:HC,weight:1,fillOpacity:.4,interactive:false}).addTo(layerPings));
   });
-  items.forEach(it => {
-    const pts = it.good.map(a=>[a.clat,a.clng]);
-    if(pts.length>1) L.polyline(pts,{color:'#ff5a4f',weight:2,opacity:.3,dashArray:'4 6',interactive:false}).addTo(layerPings);
-    it.good.slice(0,-1).forEach(a => L.circleMarker([a.clat,a.clng],{radius:3,color:'#ff5a4f',weight:1,fillOpacity:.3,interactive:false}).addTo(layerPings));
-  });
-  if(me.team==='hider'){          // hiders already see each other live; show them what the seekers were given
-    items.forEach(it => {
-      const c=[it.last.clat,it.last.clng];
-      L.circle(c,{radius:RADIUS_M,color:'#ff5a4f',weight:1,dashArray:'6 8',fillOpacity:.04,interactive:false}).addTo(layerPings);
-      const lb=document.createElement('div'); lb.className='rad dim'; lb.textContent='Seekers see: '+it.p.name+' · .2 mile radius';
-      L.marker(c,{icon:L.divIcon({html:lb,className:'',iconSize:[200,20],iconAnchor:[100,10]}),interactive:false}).addTo(layerPings);
-    });
-    return;
-  }
-  const clusters = [];            // hiders in the same area share one circle
-  items.forEach(it => {
-    const c = L.latLng(it.last.clat, it.last.clng);
-    let cl = clusters.find(k => k.center.distanceTo(c) < CLUSTER_M);
-    if(!cl){ cl = {items:[], center:c}; clusters.push(cl); }
-    cl.items.push(it);
-    const la = cl.items.reduce((a,i)=>a+i.last.clat,0)/cl.items.length, ln = cl.items.reduce((a,i)=>a+i.last.clng,0)/cl.items.length;
-    cl.center = L.latLng(la, ln);
-  });
-  clusters.forEach(cl => {
-    L.circle(cl.center,{radius:RADIUS_M,color:'#ff5a4f',weight:2,fillColor:'#ff5a4f',fillOpacity:.12,interactive:false}).addTo(layerPings);
-    L.marker(cl.center,{icon:clusterIcon(cl),interactive:false,zIndexOffset:300}).addTo(layerPings);
+  (state.areas||[]).forEach(ar => {
+    const c = [ar.clat, ar.clng];
+    const items = ar.m.map(x => ({id:x.id, p: state.players[x.id] || {name:'?'}, last:{n:x.n, ts:x.ts}}));
+    if(me.team==='hider'){        // hiders see their own team live; show them what the seekers were given
+      L.circle(c,{radius:RADIUS_M,color:HC,weight:1.5,className:'area-ring',fillColor:HC,fillOpacity:.05,interactive:false}).addTo(layerPings);
+      const lb=document.createElement('div'); lb.className='rad dim';
+      lb.textContent='Seekers see '+items.map(i=>i.p.name).join(', ')+' in this circle';
+      L.marker(c,{icon:L.divIcon({html:lb,className:'',iconSize:[280,24],iconAnchor:[140,12]}),interactive:false}).addTo(layerPings);
+    } else {
+      L.circle(c,{radius:RADIUS_M,color:HC,weight:2.5,className:'area-ring',fillColor:HC,fillOpacity:.14,interactive:false}).addTo(layerPings);
+      L.marker(c,{icon:clusterIcon({items}),interactive:false,zIndexOffset:300}).addTo(layerPings);
+    }
   });
 }
 // live positions of my own team
@@ -612,18 +795,18 @@ function drawLive(){
   layerLive.clearLayers();
   Object.entries(live).forEach(([id,l]) => {
     const p = state.players[id]; if(!p || p.off) return;
-    const col = p.team==='hider' ? '#ff5a4f' : '#4aa8ff';
-    L.circle([l.lat,l.lng],{radius:Math.max(l.acc||8,5),color:col,weight:1,fillOpacity:.1,interactive:false}).addTo(layerLive);
-    L.marker([l.lat,l.lng],{icon:pinIcon(p,(id===me.id?'you · ':'')+ago(l.ts)),interactive:false,zIndexOffset:500}).addTo(layerLive);
+    const col = p.team==='hider' ? HC : SC;
+    L.circle([l.lat,l.lng],{radius:Math.max(l.acc||8,5),color:col,weight:1,fillOpacity:.12,interactive:false}).addTo(layerLive);
+    L.marker([l.lat,l.lng],{icon:pinIcon(p, id===me.id ? 'you' : ago(l.ts), id),interactive:false,zIndexOffset:500}).addTo(layerLive);
   });
 }
 function fitMap(){
   if(!map || !state) return false;
   const pts = [];
   Object.values(live).forEach(l => pts.push([l.lat,l.lng]));
-  if(me.team==='seeker') Object.values(state.locs).forEach(arr => { const g=arr.filter(x=>!x.err&&x.clat!==undefined).slice(-1)[0]; if(g) pts.push([g.clat,g.clng]); });
+  if(me.team==='seeker') (state.areas||[]).forEach(ar => pts.push([ar.clat,ar.clng]));
   if(meMarker) pts.push(meMarker.getLatLng());
-  if(pts.length===1) map.setView(pts[0],16); else if(pts.length>1) map.fitBounds(pts,{padding:[70,70]});
+  if(pts.length===1) map.setView(pts[0],16); else if(pts.length>1) map.fitBounds(pts,{padding:[90,90]});
   return pts.length>0;
 }
 $('fit').onclick = fitMap;
@@ -636,8 +819,8 @@ $('locme').onclick = () => {
 };
 $('testLoc').onclick = () => {
   const el = $('geoStatus'); el.textContent = 'Checking…';
-  getFix(p => { el.textContent = '✅ Location works (±'+Math.round(p.coords.accuracy)+' m)'; },
-         code => { el.textContent = '❌ '+geoHelp(code); });
+  getFix(p => { el.textContent = 'Location works (within '+Math.round(p.coords.accuracy)+' m).'; },
+         code => { el.textContent = geoHelp(code); });
 };
 $('share').onclick = async () => {
   const url = location.origin+location.pathname+'?room='+me.code;
@@ -673,7 +856,7 @@ function addChat(m, quiet){
   if(m.scope==='team' && m.team!==me.team) return;
   chatSeen.add(m.id); chatMsgs.push(m); if(chatMsgs.length>200) chatMsgs.shift();
   const tab = m.scope==='team' ? 'team' : 'all';
-  if(!quiet && m.from!==me.id && !(chatOpen && chatTab===tab)){ unread[tab]++; toast('💬 '+m.name+': '+m.text.slice(0,60), 2500); }
+  if(!quiet && m.from!==me.id && !(chatOpen && chatTab===tab)){ unread[tab]++; toast(m.name+': '+m.text.slice(0,60), 2500); }
   updateBadge(); if(chatOpen) renderChat();
 }
 function updateBadge(){
@@ -687,13 +870,13 @@ function renderChat(){
   $('tabTeamTxt').textContent = me.team==='hider' ? 'Hiders only' : 'Seekers only';
   $('tabTeam').className = 'tab '+(me.team==='hider'?'h':'s')+(chatTab==='team'?' on':'');
   $('tabAll').className = 'tab all'+(chatTab==='all'?' on':'');
-  $('chatIn').placeholder = chatTab==='team' ? 'Message your '+me.team+'s only…' : 'Message everyone…';
+  $('chatIn').placeholder = chatTab==='team' ? 'Message your '+me.team+'s only' : 'Message everyone';
   const list = $('chatList'); list.innerHTML = '';
   const shown = chatMsgs.filter(m => chatTab==='all' ? m.scope==='all' : (m.scope==='team' && m.team===me.team));
   if(!shown.length){ const e=document.createElement('div'); e.className='empty'; e.textContent = chatTab==='team' ? 'Only your team can see this chat.' : 'Everyone in the game can see this chat.'; list.appendChild(e); }
   shown.forEach(m => {
     const row = document.createElement('div'); row.className = 'msg'+(m.from===me.id?' mine':'');
-    row.appendChild(avatar(state.players[m.from] || {name:m.name}, 28, m.team));
+    row.appendChild(avatar(state.players[m.from] || {name:m.name}, 30, m.team));
     const b = document.createElement('div'); b.className = 'b';
     const w = document.createElement('div'); w.className = 'who '+(m.team==='hider'?'h':'s'); w.textContent = m.name;
     const t = document.createElement('div'); t.textContent = m.text;
@@ -745,14 +928,14 @@ function talk(on){
   if(!localStream) return;
   localStream.getAudioTracks().forEach(t => t.enabled = on);
   $('ptt').classList.toggle('live', on);
-  $('ptt').textContent = on ? 'TRANSMITTING…' : 'HOLD TO TALK (team radio)';
+  $('pttTxt').textContent = on ? 'On air' : 'Hold to talk';
   if(navigator.vibrate) navigator.vibrate(on?20:0);
 }
 const ptt = $('ptt');
 ptt.addEventListener('pointerdown', e => { e.preventDefault(); ptt.setPointerCapture(e.pointerId); talk(true); });
 ['pointerup','pointercancel'].forEach(ev => ptt.addEventListener(ev, () => talk(false)));
 ptt.addEventListener('contextmenu', e => e.preventDefault());
-document.addEventListener('keydown', e => { if(e.code==='Space' && !e.repeat && document.activeElement.tagName!=='INPUT'){ e.preventDefault(); talk(true);} });
+document.addEventListener('keydown', e => { if(e.code==='Space' && !e.repeat && document.activeElement.tagName!=='INPUT' && document.activeElement.tagName!=='BUTTON'){ e.preventDefault(); talk(true);} });
 document.addEventListener('keyup', e => { if(e.code==='Space') talk(false); });
 </script>
 </body>
