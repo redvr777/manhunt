@@ -415,6 +415,7 @@ body[data-theme=seeker]{--map:invert(1) sepia(1) hue-rotate(150deg) brightness(.
       <div id="guestWait" class="small" style="margin-top:12px">Waiting for the host to start.</div>
     </div>
     <div id="actions"><button class="btn ghost hidden" id="pingNow">Ping now</button><button class="btn hot hidden" id="end">End game</button><button class="btn hidden" id="again">New round</button></div>
+    <button class="btn ghost" id="leave" style="margin-top:10px">Leave game</button>
     <div id="galWrap" class="hidden"><div class="small" style="margin-top:14px">Hider photos (tap to open)</div><div id="gal"></div></div>
     <div class="small" id="micnote" style="margin-top:8px"></div>
     <ul id="players"></ul>
@@ -707,7 +708,12 @@ function newGuestPeer(tries){
   peer=new Peer('mhp-'+me.code+'-'+uid);
   peer.on('error',e=>{
     if(e.type==='unavailable-id'&&tries<15){setTimeout(()=>newGuestPeer(tries+1),3000);return}
-    if(e.type==='peer-unavailable'){if(!entered){toast('Room not found');store.set('mh_sess','')}return}
+    if(e.type==='peer-unavailable'){
+      if(!entered){toast('Room not found');store.set('mh_sess','')}
+      else if(!me.isHost&&!hostConn){   // the host's address no longer exists on the server: they are gone, not just laggy
+        hostGoneAt=hostGoneAt||Date.now();
+        if(Date.now()-hostGoneAt>12000)closeRoom('The host left, so this room is closed.')}
+      return}
     if(!entered)toast('Connection error: '+e.type)});
   peer.on('open',id=>{me.id=id;recreating=false;connectToHost('manhunt-'+me.code,ok=>{if(!ok&&!entered){toast(me.denied?'Wrong passcode. Ask the host.':'Could not join that room');store.set('mh_sess','');try{peer.destroy()}catch(e){}}else if(!ok)attemptReconnect()})});
   commonPeer();
@@ -779,7 +785,8 @@ function onLive(pid,d){
 }
 function computeAreas(){
   const lf=id=>{const a=state.locs[id]||[];for(let i=a.length-1;i>=0;i--)if(!a[i].err&&a[i].lat!==undefined)return a[i];return null};
-  const hs=[];state.order.forEach(id=>{const p=state.players[id];if(!p||p.team!=='hider'||p.off)return;const e=lf(id);if(e)hs.push({id,e,ll:L.latLng(e.lat,e.lng)})});
+  const hs=[];state.order.forEach(id=>{const p=state.players[id];if(!p||p.team!=='hider')return;const e=lf(id)   // keep the last known circle even if that hider's connection drops for a moment
+;if(e)hs.push({id,e,ll:L.latLng(e.lat,e.lng)})});
   const cs=[];hs.forEach(h=>{if(!cs.some(c=>c.distanceTo(h.ll)<=RAD))cs.push(L.latLng(h.e.clat,h.e.clng))});
   return cs.map(c=>({clat:c.lat,clng:c.lng,m:hs.filter(h=>c.distanceTo(h.ll)<=RAD).map(h=>({id:h.id,n:h.e.n,ts:h.e.ts}))}));
 }
@@ -855,8 +862,15 @@ function geoHelp(c){return({insecure:'Open this page over https, not a saved fil
 function getFix(ok,bad){if(!secureOk||!navigator.geolocation){bad(geoErr());return}navigator.geolocation.getCurrentPosition(ok,e=>bad(geoErr(e)),{enableHighAccuracy:true,timeout:20000,maximumAge:0})}
 function doPing(){
   if(!state||state.status!=='running'||me.team!=='hider')return;
-  if(lastFix&&Date.now()-lastFix.ts<20000){send({t:'loc',lat:lastFix.lat,lng:lastFix.lng});return}
-  getFix(p=>send({t:'loc',lat:p.coords.latitude,lng:p.coords.longitude}),c=>{toast('Ping failed: '+geoHelp(c),9000);send({t:'loc',err:c})});
+  const useLast=()=>{if(lastFix){send({t:'loc',lat:lastFix.lat,lng:lastFix.lng});return true}return false};
+  const okp=p=>send({t:'loc',lat:p.coords.latitude,lng:p.coords.longitude});
+  if(lastFix&&Date.now()-lastFix.ts<30000){useLast();return}
+  // phones pause GPS for a web page while the screen is off or the tab is hidden, so fall back to the last known spot instead of sending nothing
+  if(document.hidden&&useLast())return;
+  if(!secureOk||!navigator.geolocation){if(!useLast())send({t:'loc',err:geoErr()});return}
+  navigator.geolocation.getCurrentPosition(okp,()=>{
+    navigator.geolocation.getCurrentPosition(okp,e2=>{if(!useLast()){toast('Ping failed: '+geoHelp(geoErr(e2)),9000);send({t:'loc',err:geoErr(e2)})}},{enableHighAccuracy:false,timeout:10000,maximumAge:600000})},
+    {enableHighAccuracy:true,timeout:8000,maximumAge:5000});
 }
 
 /* ===== spy photo: hider camera stays armed, snaps 1 min after each ping ===== */
@@ -922,7 +936,7 @@ function render(){
   const ul=$('players');ul.innerHTML='';
   s.order.forEach(id=>{const p=s.players[id];if(!p)return;const li=document.createElement('li');if(p.off)li.classList.add('off');li.appendChild(avatar(p,38,p.team));
     const w=document.createElement('div');w.className='who';const n=document.createElement('div');n.className='nm2';n.textContent=p.name+(id===me.id?' (you)':'');
-    const sb=document.createElement('div');sb.className='small';const last=(s.locs[id]||[]).slice(-1)[0],b=[];if(id===s.hostId)b.push('host');if(p.off)b.push('offline');else if(last)b.push(last.err?'no fix':'ping '+ago(last.ts));sb.textContent=b.join(', ');
+    const sb=document.createElement('div');sb.className='small';const last=(s.locs[id]||[]).slice(-1)[0],b=[];if(id===s.hostId)b.push('host');if(p.off)b.push('offline');else if(last)b.push(last.err?'no GPS fix on last ping':'ping '+ago(last.ts));else if(s.status==='running'&&p.team==='hider')b.push('no ping yet');sb.textContent=b.join(', ');
     w.append(n,sb);li.appendChild(w);const tg=document.createElement('span');tg.className='tg '+(p.team==='hider'?'h':'s');tg.textContent=p.team==='hider'?'Hider':'Seeker';li.appendChild(tg);
     if((me.isHost&&lobby)||me.admin){li.classList.add('tap');li.onclick=()=>send({t:'setteam',id,team:p.team==='hider'?'seeker':'hider'})}ul.appendChild(li)});
   drawMap();tick();
@@ -1025,13 +1039,14 @@ const ptt=$('ptt');ptt.addEventListener('pointerdown',e=>{e.preventDefault();ptt
 /* ===== room lifetime: the host's page IS the server, so when the host leaves, the room closes for good ===== */
 const CFG={photonPunAppId:'e311f009-c6be-433f-bda5-ee47fe131d88',photonVoiceAppId:'03e1ff28-3112-4a10-a254-8230478e742e'}; // reserved for a future Unity/PUN2 build
 let reconUntil=0,reconTimer=null,roomClosed=false,hostClosing=false;
-function onHostLost(){if(roomClosed||!state||me.isHost)return;if(!reconUntil||Date.now()>reconUntil)reconUntil=Date.now()+120000;attemptReconnect()}
+let hostGoneAt=0;
+function onHostLost(){if(roomClosed||!state||me.isHost)return;if(!reconUntil||Date.now()>reconUntil)reconUntil=Date.now()+45000;attemptReconnect()}
 function attemptReconnect(){   // a locked or backgrounded host gets 2 minutes to come back; a host that left sends "closed" instantly
   if(me.isHost||hostConn||!state||roomClosed||reconBusy)return;
-  clearTimeout(reconTimer);if(!reconUntil)reconUntil=Date.now()+120000;
+  clearTimeout(reconTimer);if(!reconUntil)reconUntil=Date.now()+45000;
   if(Date.now()>reconUntil){closeRoom('The host is gone, so this room is closed.');return}
   reconBusy=true;try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(e){}
-  connectToHost(state.hostId,ok=>{reconBusy=false;if(ok){reconUntil=0;toast('Back in the game')}else reconTimer=setTimeout(attemptReconnect,2500)});
+  connectToHost(state.hostId,ok=>{reconBusy=false;if(ok){reconUntil=0;hostGoneAt=0;toast('Back in the game')}else reconTimer=setTimeout(attemptReconnect,2500)});
 }
 function closeRoom(msg){   // guest side: shut everything down and block any way back in
   if(roomClosed||me.isHost)return;roomClosed=true;entered=false;state=null;
@@ -1045,8 +1060,13 @@ function hostClose(){   // host side: tell everyone, then take the room code off
   Object.values(conns).forEach(c=>{try{c.send({t:'closed',why:'The host left, so this room is closed.'})}catch(e){}});
   store.set('mh_sess','');store.set('mh_host','');
   beaconStop=true;try{if(beacon)beacon.destroy()}catch(e){}
-  try{peer.destroy()}catch(e){}
+  // send again a moment later and delay shutting down, so the message actually leaves the phone before the connection dies
+  setTimeout(()=>{Object.values(conns).forEach(c=>{try{c.send({t:'closed',why:'The host left, so this room is closed.'})}catch(e){}})},60);
+  setTimeout(()=>{try{peer.destroy()}catch(e){}},400);
 }
+$('leave').onclick=()=>{   // deliberate exit: host closes the room for everyone, guests just go
+  if(me.isHost){hostClose();setTimeout(()=>{location.href=location.pathname},600)}
+  else{store.set('mh_sess','');try{if(hostConn)hostConn.close()}catch(e){}try{peer.destroy()}catch(e){}location.href=location.pathname}};
 window.addEventListener('pagehide',hostClose);window.addEventListener('beforeunload',hostClose);
 $('closedBtn').onclick=()=>{location.href=location.pathname};
 
