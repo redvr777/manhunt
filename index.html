@@ -35,7 +35,7 @@ input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;b
 #panel{background:var(--panel);border-top:1px solid var(--line);padding:12px 12px calc(12px + env(safe-area-inset-bottom));max-height:55dvh;overflow:auto}
 #count{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
 #countlbl{color:var(--mute);font-size:13px}
-#teambar{display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:8px 10px;border-radius:10px;font-weight:800;letter-spacing:.5px}
+#teambar{display:flex;align-items:center;gap:10px;margin-bottom:6px;padding:8px 10px;border-radius:10px;font-weight:800;letter-spacing:.5px}
 #teambar.h{background:#ff5a4f26;color:var(--hider)}
 #teambar.s{background:#4aa8ff26;color:var(--seeker)}
 #teambar span{flex:1}
@@ -48,16 +48,23 @@ input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;b
 #ptt.live{background:var(--ok);color:#03150d;border-color:var(--ok)}
 #toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:#000d;border:1px solid var(--line);padding:9px 14px;border-radius:10px;z-index:1000;max-width:90vw;text-align:center}
 .small{font-size:12px;color:var(--mute)}
+/* map markers */
+.nm{background:#000c;color:#fff;font-size:12px;font-weight:700;padding:1px 7px;border-radius:6px;max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.tm{font-size:10px;color:#fff;background:#000a;padding:0 5px;border-radius:5px;margin-top:2px;white-space:nowrap}
 .pin{width:110px;display:flex;flex-direction:column;align-items:center;pointer-events:none}
-.pin .nm{background:#000c;color:#fff;font-size:12px;font-weight:700;padding:1px 7px;border-radius:6px;max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
-.pin .tm{font-size:10px;color:#fff;background:#000a;padding:0 5px;border-radius:5px;margin-top:2px}
+.pinc{display:flex;flex-direction:column;align-items:center;pointer-events:none}
+.crow{display:flex;gap:6px;justify-content:center}
+.ccol{display:flex;flex-direction:column;align-items:center;width:58px}
+.ccol .nm{max-width:58px}
+.rad{font-size:11px;font-weight:700;color:#fff;background:#ff5a4fdd;padding:1px 8px;border-radius:6px;margin-top:3px;white-space:nowrap}
+.rad.dim{background:#000a;border:1px dashed #ff5a4f}
 </style>
 </head>
 <body>
 
 <div id="join">
   <h1>MANHUNT HQ</h1>
-  <p class="sub">Live map, 5-minute pings, team walkie-talkies.</p>
+  <p class="sub">Live team map, hider pings, team walkie-talkies.</p>
   <div class="card">
     <div class="row" style="align-items:center">
       <div class="av" id="picPrev" style="flex:0 0 72px"></div>
@@ -77,7 +84,7 @@ input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;b
     <input type="text" id="code" maxlength="4" placeholder="ABCD" autocomplete="off" style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-size:20px">
     <button class="btn alt" id="joinbtn">Join game</button>
   </div>
-  <p class="small">Location is only read at the moment a ping fires. Hiders are shown to everyone; seekers are shown only to other seekers. The mic is only live while you hold the talk button. Needs HTTPS.</p>
+  <p class="small">While a game is running, your live location is shared with your own team only (you can switch it off). The other team never sees exact spots: seekers only get a rough 0.5-mile area for each hider at every ping. The mic is only live while you hold the talk button. Needs HTTPS.</p>
 </div>
 
 <div id="app" class="hidden">
@@ -93,6 +100,8 @@ input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;b
   <div id="panel">
     <div id="teambar" class="h"><div class="av" id="meAv" style="width:34px;height:34px"></div><span id="teamTxt"></span>
       <label class="btn alt sm" style="cursor:pointer;font-weight:600">Photo<input type="file" id="picIn2" accept="image/*" hidden></label></div>
+    <div class="small" id="rule"></div>
+    <label class="small" style="display:block;margin:6px 0"><input type="checkbox" id="liveToggle" checked> Share my live location with my team during the game</label>
     <div id="countlbl">Waiting to start</div>
     <div id="count">--:--</div>
 
@@ -128,13 +137,19 @@ input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;b
 <script>
 // Reserved for a future Unity/PUN2 build. Browsers can't use Photon Voice, so this site uses WebRTC (PeerJS).
 const CFG = { photonPunAppId:'e311f009-c6be-433f-bda5-ee47fe131d88', photonVoiceAppId:'03e1ff28-3112-4a10-a254-8230478e742e' };
+const RADIUS_M = 804.67;      // 0.5 mile — the area seekers see for each hider
+const FUZZ_M = 402;           // true spot is somewhere inside the circle, not at its center
+const CLUSTER_M = 450;        // hider circles closer than this are shown as one shared circle
 
 const $ = id => document.getElementById(id);
 const me = { id:null, name:'', team:'hider', isHost:false, code:'', pic:null };
 let peer, lobbyPeer, hostConn = null, localStream = null, state = null, skew = 0;
 let lastPingN = null, firstState = true, entered = false, migrating = false, tickHost = null;
+let liveStore = {};           // host only: latest live fix for everyone
+let live = {};                // what this device may see: live fixes of my own team
+let watchId = null, lastFix = null, lastSent = 0, watchErrShown = false;
 const conns = {}, calls = {}, audioEls = {};
-let map, layer, meMarker, fitted = false;
+let map, layerPings, layerLive, meMarker, fitted = false;
 const store = { get:k=>{ try{return localStorage.getItem(k)}catch(e){return null} }, set:(k,v)=>{ try{localStorage.setItem(k,v)}catch(e){} } };
 
 // ---------- helpers ----------
@@ -222,6 +237,8 @@ function connectToHost(hostId, cb){
   c.on('data', d => {
     if(d.t==='state'){ if(!done){ done=true; clearTimeout(to); hostConn=c; cb&&cb(true); } applyState(d.s); }
     else if(d.t==='ping') doPing();
+    else if(d.t==='live'){ live[d.id]=d.l; drawLive(); }
+    else if(d.t==='liveoff'){ delete live[d.id]; drawLive(); }
     else if(d.t==='redirect'){ done=true; clearTimeout(to); c.close(); connectToHost(d.id, cb); }
     else if(d.t==='wait') fail();
   });
@@ -252,6 +269,7 @@ function promote(old){
   me.isHost = true; migrating = false;
   state.nextPing -= skew; state.startAt -= skew;           // convert old host's clock to mine
   state.hostId = me.id; state.epoch = (state.epoch||0)+1;
+  liveStore = Object.assign({}, live);                      // seed with what I could see
   if(state.players[old]) removeOrOff(old);
   Object.keys(conns).forEach(k => delete conns[k]);
   if(!tickHost) tickHost = setInterval(hostTick, 1000);
@@ -269,6 +287,7 @@ function startLobbyPeer(n){           // keeps the room code working for late jo
 }
 function removeOrOff(id){
   if(!state.players[id]) return;
+  delete liveStore[id];
   if(state.status==='lobby'){ delete state.players[id]; state.order = state.order.filter(x=>x!==id); delete state.locs[id]; }
   else state.players[id].off = true;
 }
@@ -284,27 +303,54 @@ function hostAccept(c){
   c.on('data', d => hostHandle(c.peer, d));
   c.on('close', () => { if(conns[c.peer]===c){ delete conns[c.peer]; removeOrOff(c.peer); broadcast(); } });
 }
+function fuzz(lat,lng){
+  const ang=Math.random()*2*Math.PI, dist=Math.sqrt(Math.random())*FUZZ_M;
+  return [ lat + dist*Math.cos(ang)/111320, lng + dist*Math.sin(ang)/(111320*Math.cos(lat*Math.PI/180)) ];
+}
 function hostHandle(pid, d){
+  if(d.t==='live' || d.t==='liveoff'){ onLive(pid, d); return; }
   if(d.t==='hello'){
     const ex = state.players[pid];
     state.players[pid] = { name:String(d.name||'Player').slice(0,16), team: ex?ex.team:'hider', pic: validPic(d.pic)?d.pic:null };
     if(!state.order.includes(pid)) state.order.push(pid);
   }
   else if(d.t==='pic'){ if(state.players[pid] && validPic(d.pic)) state.players[pid].pic = d.pic; }
-  else if(d.t==='loc'){
-    if(!state.players[pid]) return;
+  else if(d.t==='loc'){            // only hiders ping; this is the exact fix, which never leaves the host/hiders
+    const p = state.players[pid]; if(!p || p.team!=='hider' || state.status!=='running') return;
     const arr = state.locs[pid] = state.locs[pid] || [];
-    if(d.err) arr.push({n:state.pingN, err:true, ts:Date.now()});
-    else arr.push({n:state.pingN, lat:d.lat, lng:d.lng, acc:d.acc, ts:Date.now()});
+    if(d.err || typeof d.lat!=='number' || typeof d.lng!=='number') arr.push({n:state.pingN, err:true, ts:Date.now()});
+    else {
+      const prev = [...arr].reverse().find(a => !a.err && a.lat!==undefined);
+      let clat, clng;
+      if(prev && L.latLng(prev.lat,prev.lng).distanceTo(L.latLng(d.lat,d.lng)) < 150){ clat=prev.clat; clng=prev.clng; }   // standing still: keep the same circle so repeat pings can't be averaged out
+      else [clat,clng] = fuzz(d.lat,d.lng);
+      arr.push({n:state.pingN, lat:d.lat, lng:d.lng, acc:d.acc, clat, clng, ts:Date.now()});
+    }
     if(arr.length>40) arr.shift();
   }
   broadcast();
 }
-// hiders' pings go to everyone; seekers' pings go only to seekers
+// real-time location: relayed to the sender's own team only
+function onLive(pid, d){
+  const p = state.players[pid]; if(!p || state.status!=='running') return;
+  if(d.t==='live'){ if(typeof d.lat!=='number' || typeof d.lng!=='number') return; liveStore[pid] = {lat:d.lat, lng:d.lng, acc:d.acc, ts:Date.now()}; }
+  else delete liveStore[pid];
+  const msg = d.t==='live' ? {t:'live', id:pid, l:liveStore[pid]} : {t:'liveoff', id:pid};
+  Object.entries(conns).forEach(([cid,c]) => { if(cid!==pid && state.players[cid]?.team===p.team){ try{c.send(msg)}catch(e){} } });
+  if(pid!==me.id && me.team===p.team){ if(d.t==='live') live[pid]=liveStore[pid]; else delete live[pid]; drawLive(); }
+}
+// what each team may see:
+//   hiders  -> exact pings + live positions of hiders
+//   seekers -> only a rough 0.5-mile circle per hider ping (no exact coordinates) + live positions of seekers
 function viewFor(team){
   const locs = {};
-  Object.entries(state.locs).forEach(([id,arr]) => { const p=state.players[id]; if(p && (p.team==='hider' || team==='seeker')) locs[id]=arr; });
-  return Object.assign({}, state, {locs, now:Date.now()});
+  Object.entries(state.locs).forEach(([id,arr]) => {
+    const p = state.players[id]; if(!p || p.team!=='hider') return;
+    locs[id] = team==='hider' ? arr : arr.map(a => a.err ? {n:a.n, err:true, ts:a.ts} : {n:a.n, ts:a.ts, clat:a.clat, clng:a.clng});
+  });
+  const lv = {};
+  Object.entries(liveStore).forEach(([id,l]) => { const p=state.players[id]; if(p && p.team===team) lv[id]=l; });
+  return Object.assign({}, state, {locs, live:lv, now:Date.now()});
 }
 function broadcast(){
   Object.entries(conns).forEach(([cid,c]) => { try{ c.send({t:'state', s:viewFor(state.players[cid]?.team)}); }catch(e){} });
@@ -320,7 +366,7 @@ function hostTick(){
 }
 $('start').onclick = () => {
   state.hideMin = Math.max(0, +$('hideMin').value||0); state.pingMin = Math.max(1, +$('pingMin').value||5);
-  state.locs = {}; state.pingN = 0; state.startAt = Date.now();
+  state.locs = {}; liveStore = {}; live = {}; state.pingN = 0; state.startAt = Date.now();
   state.nextPing = Date.now() + (state.hideMin===0 ? 1000 : state.hideMin*60000);
   state.status = 'running'; broadcast(); keepAwake();
 };
@@ -331,8 +377,8 @@ $('rand').onclick = () => {
   ids.forEach((id,i) => state.players[id].team = i<k ? 'seeker' : 'hider');
   broadcast(); toast('Teams randomized');
 };
-$('end').onclick = () => { state.status='over'; broadcast(); };
-$('again').onclick = () => { state.status='lobby'; state.locs={}; state.pingN=0; Object.keys(state.players).forEach(id=>{ if(state.players[id].off) removeOrOff(id); }); broadcast(); };
+$('end').onclick = () => { state.status='over'; liveStore={}; broadcast(); };
+$('again').onclick = () => { state.status='lobby'; state.locs={}; liveStore={}; state.pingN=0; Object.keys(state.players).forEach(id=>{ if(state.players[id].off) removeOrOff(id); }); broadcast(); };
 
 // ---------- client state ----------
 function send(d){ if(me.isHost) hostHandle(me.id, d); else if(hostConn && hostConn.open) hostConn.send(d); }
@@ -340,14 +386,42 @@ function applyState(s){
   state = s; skew = s.now - Date.now();
   const mine = s.players[me.id]; if(mine) me.team = mine.team;
   if(!entered){ entered = true; enterApp(); }
-  if(!firstState && lastPingN!==null && s.pingN > lastPingN){ beep(); toast('📍 PING! Locations updated'); }
+  if(!firstState && lastPingN!==null && s.pingN > lastPingN){ beep(); toast(me.team==='hider' ? '📍 PING! Seekers got your rough area' : '📍 PING! Hider areas updated'); }
   lastPingN = s.pingN; firstState = false;
-  if(s.status==='running') keepAwake();
+  if(s.status==='running'){
+    keepAwake();
+    const own = live[me.id];
+    live = Object.assign({}, s.live||{});
+    if(own && (!live[me.id] || own.ts > live[me.id].ts)) live[me.id] = own;
+    startWatch();
+  } else { live = {}; stopWatch(); }
   render(); syncCalls();
 }
+
+// ---------- my location ----------
+// Live: only while a game is running, only sent to my own team.
+function startWatch(){
+  if(watchId!==null || !navigator.geolocation || !$('liveToggle').checked) return;
+  watchId = navigator.geolocation.watchPosition(p => {
+    lastFix = {lat:p.coords.latitude, lng:p.coords.longitude, acc:p.coords.accuracy, ts:Date.now()};
+    if(Date.now()-lastSent < 4000) return;
+    lastSent = Date.now();
+    live[me.id] = {lat:lastFix.lat, lng:lastFix.lng, acc:lastFix.acc, ts:Date.now()+skew};
+    drawLive();
+    send({t:'live', lat:lastFix.lat, lng:lastFix.lng, acc:lastFix.acc});
+  }, e => { if(!watchErrShown){ watchErrShown=true; toast('Live location unavailable: '+e.message, 6000); } },
+  {enableHighAccuracy:true, maximumAge:2000, timeout:20000});
+}
+function stopWatch(){ if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; } lastFix=null; }
+$('liveToggle').onchange = () => {
+  if($('liveToggle').checked){ if(state && state.status==='running') startWatch(); }
+  else { stopWatch(); delete live[me.id]; send({t:'liveoff'}); drawLive(); }
+};
+// Ping: hiders only. Seekers see a rough 0.5-mile circle, built by the host.
 function doPing(){
-  if(!state || state.status!=='running') return;
-  toast('Ping! Sharing your location once…');
+  if(!state || state.status!=='running' || me.team!=='hider') return;
+  toast('Ping! Sharing a rough area of your location…');
+  if(lastFix && Date.now()-lastFix.ts < 20000){ send({t:'loc', lat:lastFix.lat, lng:lastFix.lng, acc:lastFix.acc}); return; }
   if(!navigator.geolocation){ send({t:'loc', err:'unsupported'}); return; }
   navigator.geolocation.getCurrentPosition(
     p => send({t:'loc', lat:p.coords.latitude, lng:p.coords.longitude, acc:p.coords.accuracy}),
@@ -371,8 +445,11 @@ function render(){
   $('end').classList.toggle('hidden', !(me.isHost && s.status==='running'));
   $('again').classList.toggle('hidden', !(me.isHost && s.status==='over'));
 
-  const tb=$('teambar'); tb.className = me.team==='hider'?'h':'s';
+  $('teambar').className = me.team==='hider'?'h':'s';
   $('teamTxt').textContent = 'YOU ARE A '+me.team.toUpperCase()+(me.isHost?' · HOST':'');
+  $('rule').textContent = me.team==='hider'
+    ? `Your team sees you live. Seekers only see a rough 0.5-mile circle around each hider every ${s.pingMin} min.`
+    : `You see your fellow seekers live. Hiders show up as a 0.5-mile circle every ${s.pingMin} min.`;
   const mine = s.players[me.id]||{name:me.name,pic:me.pic}; const a = avatar(mine,34,me.team); $('meAv').replaceChildren(...a.childNodes); $('meAv').className=a.className;
 
   const ul = $('players'); ul.innerHTML='';
@@ -382,7 +459,7 @@ function render(){
     li.appendChild(avatar(p,24,p.team));
     const n=document.createElement('span'); n.className='nm2'; n.textContent=(id===s.hostId?'👑 ':'')+p.name+(id===me.id?' (you)':'')+(p.off?' · offline':''); li.appendChild(n);
     const last = (s.locs[id]||[]).slice(-1)[0];
-    if(last){ const r=document.createElement('span'); r.className='small'; r.textContent = last.err ? 'no fix' : ago(last.ts); li.appendChild(r); }
+    if(last){ const r=document.createElement('span'); r.className='small'; r.textContent = last.err ? 'no fix' : 'ping '+ago(last.ts); li.appendChild(r); }
     if(me.isHost && lobby){ li.classList.add('tap'); li.onclick = () => { state.players[id].team = state.players[id].team==='hider'?'seeker':'hider'; broadcast(); }; }
     ul.appendChild(li);
   });
@@ -398,42 +475,95 @@ function tick(){
   else { $('countlbl').textContent='Waiting to start'; $('count').textContent='--:--'; }
 }
 setInterval(tick, 500);
+setInterval(() => { if(entered && state) drawMap(); }, 5000);
 
 // ---------- map ----------
 function initMap(){
   map = L.map('map').setView([39,-98],4);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
-  layer = L.layerGroup().addTo(map);
+  layerPings = L.layerGroup().addTo(map);
+  layerLive = L.layerGroup().addTo(map);
   setTimeout(()=>map.invalidateSize(),200);
 }
-function pinIcon(p,last){
+function pinIcon(p, tag){
   const w=document.createElement('div'); w.className='pin';
   const nm=document.createElement('div'); nm.className='nm'; nm.textContent=p.name;
-  const av=avatar(p,34,p.team);
-  const tm=document.createElement('div'); tm.className='tm'; tm.textContent='#'+last.n+' · '+ago(last.ts);
-  w.append(nm,av,tm);
-  return L.divIcon({html:w, className:'', iconSize:[110,70], iconAnchor:[55,35]});
+  const tm=document.createElement('div'); tm.className='tm'; tm.textContent=tag;
+  w.append(nm, avatar(p,36,p.team), tm);
+  return L.divIcon({html:w, className:'', iconSize:[110,72], iconAnchor:[55,38]});
 }
-function drawMap(){
-  layer.clearLayers(); const pts=[];
+function clusterIcon(cl){
+  const w=document.createElement('div'); w.className='pinc';
+  const row=document.createElement('div'); row.className='crow';
+  cl.items.slice(0,6).forEach(it => {
+    const col=document.createElement('div'); col.className='ccol';
+    const nm=document.createElement('div'); nm.className='nm'; nm.textContent=it.p.name;
+    col.append(nm, avatar(it.p,42,'hider')); row.appendChild(col);
+  });
+  const newest = Math.max(...cl.items.map(i=>i.last.ts)), n = Math.max(...cl.items.map(i=>i.last.n));
+  const lb=document.createElement('div'); lb.className='rad'; lb.textContent='.5 mile radius · ping #'+n+' · '+ago(newest);
+  w.append(row, lb);
+  const width = Math.max(150, Math.min(cl.items.length,6)*64);
+  return L.divIcon({html:w, className:'', iconSize:[width,96], iconAnchor:[width/2,48]});
+}
+function drawMap(){ if(!map) return; drawPings(); drawLive(); if(!fitted && fitMap()) fitted = true; }
+
+// hider pings: a 0.5-mile circle (never an exact dot) with the hider's picture and name inside
+function drawPings(){
+  layerPings.clearLayers();
+  const items = [];
   Object.entries(state.locs).forEach(([id,arr]) => {
     const p = state.players[id]; if(!p) return;
-    const good = arr.filter(a=>!a.err); if(!good.length) return;
-    const col = p.team==='hider' ? '#ff5a4f' : '#4aa8ff';
-    const trail = good.map(a=>[a.lat,a.lng]);
-    if(trail.length>1) L.polyline(trail,{color:col,weight:2,opacity:.45,dashArray:'4 6'}).addTo(layer);
-    good.slice(0,-1).forEach(a => L.circleMarker([a.lat,a.lng],{radius:4,color:col,weight:1,fillOpacity:.35}).addTo(layer));
-    const last = good[good.length-1];
-    L.circle([last.lat,last.lng],{radius:Math.max(last.acc||10,5),color:col,weight:1,fillOpacity:.1}).addTo(layer);
-    L.marker([last.lat,last.lng],{icon:pinIcon(p,last),interactive:false}).addTo(layer);
-    pts.push([last.lat,last.lng]);
+    const good = arr.filter(a => !a.err && a.clat!==undefined); if(!good.length) return;
+    items.push({id, p, good, last:good[good.length-1]});
   });
-  if(pts.length && !fitted){ fitMap(); fitted=true; }
+  items.forEach(it => {
+    const pts = it.good.map(a=>[a.clat,a.clng]);
+    if(pts.length>1) L.polyline(pts,{color:'#ff5a4f',weight:2,opacity:.3,dashArray:'4 6',interactive:false}).addTo(layerPings);
+    it.good.slice(0,-1).forEach(a => L.circleMarker([a.clat,a.clng],{radius:3,color:'#ff5a4f',weight:1,fillOpacity:.3,interactive:false}).addTo(layerPings));
+  });
+  if(me.team==='hider'){          // hiders already see each other live; show them what the seekers were given
+    items.forEach(it => {
+      const c=[it.last.clat,it.last.clng];
+      L.circle(c,{radius:RADIUS_M,color:'#ff5a4f',weight:1,dashArray:'6 8',fillOpacity:.04,interactive:false}).addTo(layerPings);
+      const lb=document.createElement('div'); lb.className='rad dim'; lb.textContent='Seekers see: '+it.p.name+' · .5 mile radius';
+      L.marker(c,{icon:L.divIcon({html:lb,className:'',iconSize:[200,20],iconAnchor:[100,10]}),interactive:false}).addTo(layerPings);
+    });
+    return;
+  }
+  const clusters = [];            // hiders in the same area share one circle
+  items.forEach(it => {
+    const c = L.latLng(it.last.clat, it.last.clng);
+    let cl = clusters.find(k => k.center.distanceTo(c) < CLUSTER_M);
+    if(!cl){ cl = {items:[], center:c}; clusters.push(cl); }
+    cl.items.push(it);
+    const la = cl.items.reduce((a,i)=>a+i.last.clat,0)/cl.items.length, ln = cl.items.reduce((a,i)=>a+i.last.clng,0)/cl.items.length;
+    cl.center = L.latLng(la, ln);
+  });
+  clusters.forEach(cl => {
+    L.circle(cl.center,{radius:RADIUS_M,color:'#ff5a4f',weight:2,fillColor:'#ff5a4f',fillOpacity:.12,interactive:false}).addTo(layerPings);
+    L.marker(cl.center,{icon:clusterIcon(cl),interactive:false,zIndexOffset:300}).addTo(layerPings);
+  });
+}
+// live positions of my own team
+function drawLive(){
+  if(!layerLive || !state) return;
+  layerLive.clearLayers();
+  Object.entries(live).forEach(([id,l]) => {
+    const p = state.players[id]; if(!p || p.off) return;
+    const col = p.team==='hider' ? '#ff5a4f' : '#4aa8ff';
+    L.circle([l.lat,l.lng],{radius:Math.max(l.acc||8,5),color:col,weight:1,fillOpacity:.1,interactive:false}).addTo(layerLive);
+    L.marker([l.lat,l.lng],{icon:pinIcon(p,(id===me.id?'you · ':'')+ago(l.ts)),interactive:false,zIndexOffset:500}).addTo(layerLive);
+  });
 }
 function fitMap(){
-  const pts=[]; Object.values(state.locs).forEach(a=>{ const g=a.filter(x=>!x.err).slice(-1)[0]; if(g) pts.push([g.lat,g.lng]); });
+  if(!map || !state) return false;
+  const pts = [];
+  Object.values(live).forEach(l => pts.push([l.lat,l.lng]));
+  if(me.team==='seeker') Object.values(state.locs).forEach(arr => { const g=arr.filter(x=>!x.err&&x.clat!==undefined).slice(-1)[0]; if(g) pts.push([g.clat,g.clng]); });
   if(meMarker) pts.push(meMarker.getLatLng());
-  if(pts.length===1) map.setView(pts[0],17); else if(pts.length>1) map.fitBounds(pts,{padding:[60,60]});
+  if(pts.length===1) map.setView(pts[0],16); else if(pts.length>1) map.fitBounds(pts,{padding:[70,70]});
+  return pts.length>0;
 }
 $('fit').onclick = fitMap;
 $('locme').onclick = () => {
