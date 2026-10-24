@@ -657,7 +657,6 @@ function keepAlive(){try{
   if('mediaSession' in navigator){navigator.mediaSession.metadata=new MediaMetadata({title:'Manhunt is live',artist:'Game in progress'});navigator.mediaSession.playbackState='playing';
     ['play','pause','stop'].forEach(a=>{try{navigator.mediaSession.setActionHandler(a,()=>keepEl.play().catch(()=>{}))}catch(e){}})}
 }catch(e){}}
-setInterval(()=>{if(entered&&!me.isHost&&hostConn&&lastStateAt&&Date.now()-lastStateAt>15000){lastStateAt=Date.now();try{hostConn.close()}catch(e){}}},5000);
 let wakeLock=null;
 async function keepAwake(){try{if('wakeLock' in navigator&&(!wakeLock||wakeLock.released))wakeLock=await navigator.wakeLock.request('screen')}catch(e){}}
 function notify(t,b,tag){if(!document.hidden)return;try{if('Notification' in window&&Notification.permission==='granted')new Notification(t,{body:b,tag:tag||'mh',renotify:true})}catch(e){}}
@@ -749,8 +748,8 @@ function connectToHost(hid,cb){
   const fail=()=>{if(done)return;done=true;clearTimeout(to);try{c.close()}catch(e){}cb&&cb(false)};const to=setTimeout(fail,15000);
   c.on('open',()=>c.send({t:'hello',name:me.name,pic:me.pic,pass:me.pass,admin:me.admin?ADMIN_CODE:''}));
   c.on('data',d=>{
-    if(d.t==='state'){if(!done){done=true;clearTimeout(to);hostConn=c;cb&&cb(true)}lastStateAt=Date.now();const sg=JSON.stringify(Object.assign({},d.s,{now:0}));if(sg!==lastSig||first){lastSig=sg;applyState(d.s)}else skew=d.s.now-Date.now()}
-    else if(d.t==='ping')doPing();else if(d.t==='snap')doSnap(d.n);else if(d.t==='talking')setTalker(d.id,d.on);else if(d.t==='foundmsg')onFoundMsg(d);else if(d.t==='foundask')onFoundAsk(d);else if(d.t==='note')toast(d.m,3500);else if(d.t==='pics'){Object.assign(picCache,d.m||{});pingSig='';if(state)render()}else if(d.t==='founddenied')toast(d.name+' says they were not found.',4000);
+    if(d.t==='state'){if(!done){done=true;clearTimeout(to);hostConn=c;cb&&cb(true)}const sg=JSON.stringify(Object.assign({},d.s,{now:0}));if(sg!==lastSig||first||d.s.revision!==state?.revision){lastSig=sg;applyState(d.s)}else skew=d.s.now-Date.now()}
+    else if(d.t==='ping')doPing();else if(d.t==='snap')doSnap(d.n);else if(d.t==='talking')setTalker(d.id,d.on);else if(d.t==='foundmsg')onFoundMsg(d);else if(d.t==='foundask')onFoundAsk(d);else if(d.t==='note')toast(d.m,3500);else if(d.t==='founddenied')toast(d.name+' says they were not found.',4000);
     else if(d.t==='live'){live[d.id]=d.l;drawLive()}else if(d.t==='liveoff'){delete live[d.id];drawLive()}
     else if(d.t==='photo')addPhoto(d.p,false);else if(d.t==='photos')(d.list||[]).forEach(p=>addPhoto(p,true));
     else if(d.t==='chat')addChat(d.m);else if(d.t==='chathist')(d.list||[]).forEach(m=>addChat(m,true));
@@ -779,28 +778,28 @@ function hostHandle(pid,d){
   if(d.t==='live'||d.t==='liveoff'){onLive(pid,d);return}
   if(d.t==='setteam'){const ok=pid===me.id?(me.admin||me.isHost):adminPeers[pid];if(!ok)return;
     const tid=d.id&&state.players[d.id]?d.id:pid,p=state.players[tid];if(!p)return;p.team=d.team==='seeker'?'seeker':'hider';
-    if(p.team==='seeker'){delete state.locs[tid];const c=conns[tid];if(c){try{c.send({t:'photos',list:photos.slice(-8)})}catch(e){}}}
+    if(p.team==='seeker'){delete state.locs[tid];const c=conns[tid];if(c){try{c.send({t:'photos',list:photos})}catch(e){}}}
     const nm={t:'note',m:p.name+' is now a '+p.team};Object.values(conns).forEach(c=>{try{c.send(nm)}catch(e){}});if(state.status==='running')toast(nm.m,3000);
     broadcast();return}
   if(d.t==='chat'){hostChat(pid,d);return}
   if(d.t==='photo'){hostPhoto(pid,d);return}
   if(d.t==='hello'){const ex=state.players[pid];state.players[pid]={name:String(d.name||'Player').slice(0,16),team:ex?ex.team:'hider',pic:validPic(d.pic)?d.pic:null};
-    if(!state.order.includes(pid))state.order.push(pid);shareAllPics(pid);
-    const c=conns[pid],p=state.players[pid];if(c){try{c.send({t:'chathist',list:chatLog.filter(m=>m.scope==='all'||m.team===p.team)});if(p.team==='seeker')c.send({t:'photos',list:photos.slice(-8)})}catch(e){}}}
-  else if(d.t==='pic'){if(state.players[pid]&&validPic(d.pic)){state.players[pid].pic=d.pic;shareAllPics(pid)}}
+    if(!state.order.includes(pid))state.order.push(pid);
+    const c=conns[pid],p=state.players[pid];if(c){try{c.send({t:'chathist',list:chatLog.filter(m=>m.scope==='all'||m.team===p.team)});if(p.team==='seeker')c.send({t:'photos',list:photos})}catch(e){}}}
+  else if(d.t==='pic'){if(state.players[pid]&&validPic(d.pic))state.players[pid].pic=d.pic}
   else if(d.t==='loc'){const p=state.players[pid];if(!p||p.team!=='hider'||state.status!=='running')return;
     const arr=state.locs[pid]=state.locs[pid]||[];
     if(d.err||typeof d.lat!=='number')arr.push({n:state.pingN,err:String(d.err||'error').slice(0,20),ts:Date.now()});
     else{const prev=[...arr].reverse().find(a=>!a.err&&a.lat!==undefined);let cl,cg;
       if(prev&&L.latLng(prev.lat,prev.lng).distanceTo(L.latLng(d.lat,d.lng))<STILL){cl=prev.clat;cg=prev.clng}else[cl,cg]=fuzz(d.lat,d.lng);
-      arr.push({n:state.pingN,lat:d.lat,lng:d.lng,clat:cl,clng:cg,ts:Date.now()})}
+      arr.push({n:state.pingN,lat:d.lat,lng:d.lng,clat:cl,clng:cg,hd:typeof d.hd==='number'?((d.hd%360)+360)%360:undefined,ts:Date.now()})}
     if(arr.length>40)arr.shift()}
   broadcast();
 }
 function hostPhoto(pid,d){
   const p=state.players[pid];if(!p||p.team!=='hider'||state.status!=='running')return;
   const ok=typeof d.img==='string'&&d.img.startsWith('data:image/jpeg')&&d.img.length<90000;
-  const m={id:pid,name:p.name,pic:null,n:d.n,ts:Date.now(),img:ok?d.img:null};
+  const m={id:pid,name:p.name,pic:p.pic,n:d.n,ts:Date.now(),img:ok?d.img:null};
   photos.push(m);if(photos.length>30)photos.shift();
   Object.entries(conns).forEach(([cid,c])=>{if(state.players[cid]?.team==='seeker'){try{c.send({t:'photo',p:m})}catch(e){}}});
   if(me.team==='seeker')addPhoto(m,false);
@@ -819,29 +818,24 @@ function computeAreas(){
   const hs=[];state.order.forEach(id=>{const p=state.players[id];if(!p||p.team!=='hider')return;const e=lf(id)   // keep the last known circle even if that hider's connection drops for a moment
 ;if(e)hs.push({id,e,ll:L.latLng(e.lat,e.lng)})});
   const cs=[];hs.forEach(h=>{if(!cs.some(c=>c.distanceTo(h.ll)<=RAD))cs.push(L.latLng(h.e.clat,h.e.clng))});
-  return cs.map(c=>({clat:c.lat,clng:c.lng,m:hs.filter(h=>c.distanceTo(h.ll)<=RAD).map(h=>({id:h.id,n:h.e.n,ts:h.e.ts}))}));
+  return cs.map(c=>({clat:c.lat,clng:c.lng,m:hs.filter(h=>c.distanceTo(h.ll)<=RAD).map(h=>({id:h.id,n:h.e.n,ts:h.e.ts,hd:h.e.hd}))}));
 }
 // Exact hider coordinates never leave the host. Everyone gets only the fuzzed circle data.
 function viewFor(team){
-  const locs={};Object.entries(state.locs).forEach(([id,arr])=>{if(state.players[id]?.team!=='hider')return;locs[id]=arr.map(a=>a.err?{n:a.n,err:a.err,ts:a.ts}:{n:a.n,ts:a.ts,clat:a.clat,clng:a.clng})});
+  const locs={};Object.entries(state.locs).forEach(([id,arr])=>{if(state.players[id]?.team!=='hider')return;locs[id]=arr.map(a=>a.err?{n:a.n,err:a.err,ts:a.ts}:{n:a.n,ts:a.ts,clat:a.clat,clng:a.clng,hd:a.hd})});
   const lv={};Object.entries(liveStore).forEach(([id,l])=>{const p=state.players[id];if(p&&canSeeLive(team,p.team))lv[id]=l});
-  const pl={};Object.entries(state.players).forEach(([id,p])=>{pl[id]=Object.assign({},p,{pic:null})});
-  return Object.assign({},state,{players:pl,locs,live:lv,areas:computeAreas(),now:Date.now()});
+  return Object.assign({},state,{locs,live:lv,areas:computeAreas(),now:Date.now()});
 }
-function broadcast(){Object.entries(state.players).forEach(([id,p])=>{if(p.pic)picCache[id]=p.pic});
+function broadcast(){
+  stateRevision++;state.revision=stateRevision;
   Object.entries(conns).forEach(([cid,c])=>{try{c.send({t:'state',s:viewFor(state.players[cid]?.team)})}catch(e){}});
   const auth=state;                                   // the host's real state, with exact coordinates
   const v=JSON.parse(JSON.stringify(viewFor(auth.players[me.id]?.team)));
   applyState(v);                                      // render the safe view
   if(me.isHost){auth.areas=v.areas;auth.now=v.now;state=auth}   // put the real state back so circles persist
 }
-let hbN=0,lastSig='',lastStateAt=0;const picCache={};
-function fillPics(){if(!state)return;Object.entries(state.players).forEach(([id,p])=>{if(picCache[id])p.pic=picCache[id]})}
-function shareAllPics(pid){const all={};Object.entries(state.players).forEach(([id,p])=>{if(p.pic)all[id]=p.pic});
-  const c=conns[pid];if(c){try{c.send({t:'pics',m:all})}catch(e){}}
-  const mine=state.players[pid]&&state.players[pid].pic;
-  if(mine)Object.entries(conns).forEach(([cid,cc])=>{if(cid!==pid){try{cc.send({t:'pics',m:{[pid]:mine}})}catch(e){}}})}
-function pushState(){Object.entries(conns).forEach(([cid,c])=>{try{c.send({t:'state',s:viewFor(state.players[cid]?.team)})}catch(e){}})}
+let hbN=0,lastSig='',stateRevision=0;
+function pushState(){if(state)state.revision=stateRevision;Object.entries(conns).forEach(([cid,c])=>{try{c.send({t:'state',s:viewFor(state.players[cid]?.team)})}catch(e){}})}
 function firePing(){
   state.pingN++;state.photoAt=Date.now()+Math.min(60000,state.pingMin*30000);
   Object.values(conns).forEach(c=>{try{c.send({t:'ping'})}catch(e){}});doPing();broadcast();
@@ -905,8 +899,8 @@ function geoHelp(c){return({insecure:'Open this page over https, not a saved fil
 function getFix(ok,bad){if(!secureOk||!navigator.geolocation){bad(geoErr());return}navigator.geolocation.getCurrentPosition(ok,e=>bad(geoErr(e)),{enableHighAccuracy:true,timeout:20000,maximumAge:0})}
 function doPing(){
   if(!state||state.status!=='running'||me.team!=='hider')return;
-  const useLast=()=>{if(lastFix){send({t:'loc',lat:lastFix.lat,lng:lastFix.lng});return true}return false};
-  const okp=p=>send({t:'loc',lat:p.coords.latitude,lng:p.coords.longitude});
+  const useLast=()=>{if(lastFix){send({t:'loc',lat:lastFix.lat,lng:lastFix.lng,hd:heading===null?undefined:Math.round(heading)});return true}return false};
+  const okp=p=>send({t:'loc',lat:p.coords.latitude,lng:p.coords.longitude,hd:heading===null?undefined:Math.round(heading)});
   if(lastFix&&Date.now()-lastFix.ts<30000){useLast();return}
   // phones pause GPS for a web page while the screen is off or the tab is hidden, so fall back to the last known spot instead of sending nothing
   if(document.hidden&&useLast())return;
@@ -931,8 +925,8 @@ async function doSnap(n){
   const v=$('snapV');
   try{ if(v.paused)await v.play();
     if(!v.videoWidth)await new Promise(r=>setTimeout(r,600));
-    const w=280,h=Math.round(w*(v.videoHeight||3)/(v.videoWidth||4)),c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(v,0,0,w,h);
-    send({t:'photo',n,img:c.toDataURL('image/jpeg',.5)});play('snap');
+    const w=360,h=Math.round(w*(v.videoHeight||3)/(v.videoWidth||4)),c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(v,0,0,w,h);
+    send({t:'photo',n,img:c.toDataURL('image/jpeg',.6)});play('snap');
   }catch(e){send({t:'photo',n,img:null})}
 }
 function addPhoto(p,quiet){
@@ -941,7 +935,7 @@ function addPhoto(p,quiet){
   play('snap');notify('Photo from '+p.name,'A hider was spotted.','photo');if(navigator.vibrate)navigator.vibrate([80,60,200]);showPhoto(p);
 }
 function showPhoto(p){
-  $('pAv').replaceChildren(avatar(Object.assign({},p,{pic:picCache[p.id]||p.pic}),56,'hider'));$('pName').textContent=p.name;$('pMeta').textContent='HIDER · ping '+p.n+' · '+ago(p.ts);
+  $('pAv').replaceChildren(avatar(p,56,'hider'));$('pName').textContent=p.name;$('pMeta').textContent='HIDER · ping '+p.n+' · '+ago(p.ts);
   const i=$('pImg');if(p.img){i.src=p.img;i.style.display='block'}else{i.removeAttribute('src');i.style.display='none';$('pMeta').textContent+=' · camera unavailable'}
   $('photo').classList.remove('hidden')}
 $('pClose').onclick=()=>$('photo').classList.add('hidden');
@@ -967,7 +961,7 @@ document.addEventListener('pointerdown',e=>{const b=e.target.closest&&e.target.c
   const r=b.getBoundingClientRect(),d=Math.max(r.width,r.height)*1.7,x=document.createElement('span');x.className='rip';
   x.style.cssText='width:'+d+'px;height:'+d+'px;left:'+(e.clientX-r.left-d/2)+'px;top:'+(e.clientY-r.top-d/2)+'px';b.appendChild(x);setTimeout(()=>x.remove(),650)},{passive:true});
 document.addEventListener('pointerdown',e=>{if(navigator.vibrate&&e.target.closest&&e.target.closest('.btn,.tool,.tab,.seg button,#sheetBtn'))navigator.vibrate(8)},{passive:true});
-function render(){fillPics();
+function render(){
   const s=state,lobby=s.status==='lobby';document.body.dataset.theme=lobby?'neutral':me.team;
   $('status').textContent={lobby:'Lobby',running:'Live',over:'Over'}[s.status];$('status').dataset.s=s.status;
   $('hostSettings').classList.toggle('hidden',!(me.isHost&&lobby));$('hostNote').classList.toggle('hidden',!me.isHost);$('guestWait').classList.toggle('hidden',me.isHost||!lobby);$('lobbyBox').classList.toggle('hidden',!lobby);
@@ -1005,7 +999,7 @@ function pinIcon(p,tag,id,hd){const w=document.createElement('div');w.className=
 function clusterIcon(items,maxN,newest){
   const w=document.createElement('div');w.className='pin';w.style.width='auto';
   const row=document.createElement('div');row.className='crow';
-  items.slice(0,8).forEach(it=>{const c=document.createElement('div');c.className='ccol';c.append(tape(it.p.name,'hider',it.id),avatar(it.p,44,'hider'));
+  items.slice(0,8).forEach(it=>{const c=document.createElement('div');c.className='ccol';c.append(tape(it.p.name,'hider',it.id));const av=avatar(it.p,44,'hider');if(typeof it.hd==='number'){const wrap=document.createElement('div');wrap.className='hdwrap';wrap.style.width='44px';wrap.style.height='44px';const cone=document.createElement('div');cone.className='hdcone h';cone.style.transform='rotate('+it.hd+'deg)';cone.style.left='-33px';cone.style.top='-33px';cone.style.width='110px';cone.style.height='110px';av.style.position='relative';av.style.zIndex='1';wrap.append(cone,av);c.appendChild(wrap)}else c.appendChild(av);
     c.onclick=ev=>{ev.stopPropagation();askFound(it.id)};
     if(it.n<maxN){const t=document.createElement('div');t.className='tm';t.textContent='ping '+it.n;c.appendChild(t)}row.appendChild(c)});
   const lb=document.createElement('div');lb.className='rad';const b=document.createElement('b');b.textContent='.1 mile radius';
@@ -1021,7 +1015,7 @@ function drawPings(){
   Object.values(state.locs).forEach(arr=>{const g=arr.filter(a=>!a.err&&a.clat!==undefined);if(!g.length)return;
     if(g.length>1)L.polyline(g.map(a=>[a.clat,a.clng]),{color:HC,weight:2,opacity:.35,dashArray:'4 7',interactive:false}).addTo(layerP);
     g.slice(0,-1).forEach(a=>L.circleMarker([a.clat,a.clng],{radius:3,color:HC,weight:1,fillOpacity:.4,interactive:false}).addTo(layerP))});
-  (state.areas||[]).forEach(ar=>{const c=[ar.clat,ar.clng],items=ar.m.map(x=>({id:x.id,n:x.n,ts:x.ts,p:state.players[x.id]||{name:'?'}}));
+  (state.areas||[]).forEach(ar=>{const c=[ar.clat,ar.clng],items=ar.m.map(x=>({id:x.id,n:x.n,ts:x.ts,hd:x.hd,p:state.players[x.id]||{name:'?'}}));
     if(me.team==='hider'){L.circle(c,{radius:RAD,color:HC,weight:1.5,dashArray:'12 9',fillColor:HC,fillOpacity:.05,interactive:false}).addTo(layerP);
       const lb=document.createElement('div');lb.className='rad dim';lb.textContent='Seekers see '+items.map(i=>i.p.name).join(', ')+' here';
       L.marker(c,{icon:L.divIcon({html:lb,className:'',iconSize:[280,24],iconAnchor:[140,12]}),interactive:false}).addTo(layerP)}
@@ -1055,7 +1049,7 @@ let heading=null,compassOn=false,oriBound=false;
 function setHeading(h){if(h==null||isNaN(h))return;h=((h%360)+360)%360;
   if(heading!==null&&Math.abs(((h-heading+540)%360)-180)<3)return;   // ignore tiny jitter
   heading=h;if(meMarker&&meLL)drawMeMarker();if(live[me.id]){live[me.id].hd=Math.round(h);drawLive()}
-  if(state&&state.status==='running'&&lastFix&&watchId!==null&&Date.now()-lastSent>600){lastSent=Date.now();send({t:'live',lat:lastFix.lat,lng:lastFix.lng,acc:lastFix.acc,hd:Math.round(h)})}}
+  if(state&&state.status==='running'&&lastFix&&watchId!==null&&Date.now()-lastSent>3000){lastSent=Date.now();send({t:'live',lat:lastFix.lat,lng:lastFix.lng,acc:lastFix.acc,hd:Math.round(h)})}}
 function onOri(e){let h=null;
   if(typeof e.webkitCompassHeading==='number'&&!isNaN(e.webkitCompassHeading))h=e.webkitCompassHeading;   // iPhone gives compass degrees directly
   else if(e.absolute===true&&e.alpha!=null&&e.beta!=null&&e.gamma!=null){
@@ -1100,7 +1094,7 @@ function onFound(pid,d){   // host: only the hider themselves can make this call
   t.team='seeker';delete state.locs[pid];
   const msg={t:'foundmsg',name:t.name,by:by?by.name:null};
   Object.values(conns).forEach(c=>{try{c.send(msg)}catch(e){}});
-  const c=conns[pid];if(c){try{c.send({t:'photos',list:photos.slice(-8)})}catch(e){}}
+  const c=conns[pid];if(c){try{c.send({t:'photos',list:photos})}catch(e){}}
   onFoundMsg(msg);
   if(!Object.values(state.players).some(p=>p.team==='hider'&&!p.off)){state.status='over';liveStore={}}
   broadcast()}
