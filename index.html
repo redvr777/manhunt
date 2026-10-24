@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0d0f13">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Manhunt">
 <title>Manhunt</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -197,6 +200,7 @@ body[data-theme] .leaflet-tile-pane{filter:var(--map);transition:filter .9s}
       <button class="btn ghost" id="joinbtn" style="margin-top:14px">Join game</button>
     </div>
     <p class="small">During a game your live position goes to your own team only, and you can switch that off. Seekers never get exact spots for hiders, just a 0.2 mile circle at each ping. The mic opens only while you hold the radio button.</p>
+    <p class="small"><b>Tip:</b> allow notifications when asked, and keep the Manhunt tab open (just switch apps or lock the screen, don't swipe it away). Sounds, the countdown and pings keep going while it's in the background.</p>
   </div>
 </section>
 
@@ -228,10 +232,12 @@ body[data-theme] .leaflet-tile-pane{filter:var(--map);transition:filter .9s}
     </div>
     <div id="rule"></div>
     <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="liveToggle" checked>Share my live location with my team during the game</label>
+    <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="soundToggle" checked>Game sounds (ping, countdown, chat, role)</label>
 
     <div id="lobbyBox">
       <button class="btn ghost" id="testLoc" style="margin-top:6px">Test my location</button>
       <div class="small" id="geoStatus" style="margin-top:6px"></div>
+      <button class="btn ghost" id="testSnd" style="margin-top:6px">Test sounds</button>
       <div id="hostSettings" class="hidden">
         <div class="row" style="margin-top:6px">
           <div><label class="l">Seekers</label><input type="number" id="seekN" value="1" min="0" max="20"></div>
@@ -303,7 +309,6 @@ const store = { get:k=>{ try{return localStorage.getItem(k)}catch(e){return null
 function toast(msg, ms=3500){ const t=$('toast'); t.textContent=msg; t.classList.remove('hidden'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.add('hidden'),ms); }
 function fmt(ms){ ms=Math.max(0,Math.ceil(ms/1000)); const m=Math.floor(ms/60), s=ms%60; return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
 function ago(ts){ const s=Math.max(0,Math.round((Date.now()+skew-ts)/1000)); return s<60 ? s+'s ago' : Math.round(s/60)+' min ago'; }
-function beep(){ try{ const c=new (window.AudioContext||window.webkitAudioContext)(); const o=c.createOscillator(), g=c.createGain(); o.connect(g); g.connect(c.destination); o.type='triangle'; o.frequency.setValueAtTime(660,c.currentTime); o.frequency.exponentialRampToValueAtTime(990,c.currentTime+.18); g.gain.setValueAtTime(.18,c.currentTime); g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.45); o.start(); o.stop(c.currentTime+.45);}catch(e){} if(navigator.vibrate) navigator.vibrate([200,100,200]); }
 async function getMic(){
   try{
     localStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
@@ -313,6 +318,93 @@ async function getMic(){
     $('micnote').textContent='Mic unavailable. You can listen but not talk. Allow microphone access and rejoin.';
   }
 }
+
+// ---------- sounds + background keep-alive ----------
+// A web page can't run once it's closed or the phone is off. What it CAN do is keep running while it's
+// backgrounded or the screen is locked, as long as it's still open. To make that work we:
+//   1) hold a screen wake lock while the game runs,
+//   2) loop a silent <audio> track so the browser treats the tab as "playing media" and doesn't freeze it,
+//   3) schedule the countdown beeps ON THE AUDIO CLOCK, so they fire on time even if timers get throttled,
+//   4) show a system notification for pings / chat / role when the tab is hidden.
+let actx = null, keepEl = null, sched = [], schedKey = null, schedPingAt = 0, lastNotifAt = 0;
+const sndOn = () => $('soundToggle').checked;
+
+function silentWavUrl(){
+  const n = 8000, b = new ArrayBuffer(44+n), v = new DataView(b);
+  const w = (o,s) => { for(let i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); };
+  w(0,'RIFF'); v.setUint32(4,36+n,true); w(8,'WAVEfmt '); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,8000,true); v.setUint32(28,8000,true); v.setUint16(32,1,true); v.setUint16(34,8,true); w(36,'data'); v.setUint32(40,n,true);
+  new Uint8Array(b,44).fill(128);
+  return URL.createObjectURL(new Blob([b],{type:'audio/wav'}));
+}
+function startKeepAlive(){
+  try{
+    if(!keepEl){
+      keepEl = new Audio(silentWavUrl()); keepEl.loop = true; keepEl.volume = 0.01; keepEl.setAttribute('playsinline','');
+      keepEl.addEventListener('pause', () => { if(entered && !keepEl._stop) keepEl.play().catch(()=>{}); });
+    }
+    keepEl.play().catch(()=>{});
+    if('mediaSession' in navigator){
+      navigator.mediaSession.metadata = new MediaMetadata({ title:'Manhunt is live', artist:'Game in progress' });
+      navigator.mediaSession.playbackState = 'playing';
+      ['play','pause','stop'].forEach(a => { try{ navigator.mediaSession.setActionHandler(a, () => { keepEl && keepEl.play().catch(()=>{}); }); }catch(e){} });
+    }
+  }catch(e){}
+}
+function unlockAudio(){
+  try{
+    if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state !== 'running') actx.resume();
+  }catch(e){}
+  startKeepAlive();
+}
+function askNotify(){ try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(e){} }
+function notify(title, body, tag){
+  if(!document.hidden) return;
+  try{ if('Notification' in window && Notification.permission==='granted'){ new Notification(title,{body, tag:tag||'manhunt', renotify:true}); } }catch(e){}
+}
+// one note: oscillator + quick envelope, scheduled at audio-clock time t0
+function tone(t0, f0, f1, dur, vol, type){
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type||'sine'; o.frequency.setValueAtTime(f0, t0);
+  if(f1 && f1!==f0) o.frequency.exponentialRampToValueAtTime(f1, t0+dur);
+  g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0+.012); g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+  o.connect(g); g.connect(actx.destination); o.start(t0); o.stop(t0+dur+.03);
+  return o;
+}
+const SND = {
+  // ping: bright three-note rising alert
+  ping(at){ const t=at; return [tone(t,660,990,.2,.5,'triangle'), tone(t+.2,880,1320,.2,.5,'triangle'), tone(t+.42,1175,1175,.45,.5,'triangle')]; },
+  // chat: soft two-note blip
+  chat(at){ const t=at; return [tone(t,880,880,.09,.3,'sine'), tone(t+.1,1320,1320,.14,.3,'sine')]; },
+  // countdown: short tick; last==true is the long final beep
+  tick(at,last){ return [tone(at, last?1320:880, last?1320:880, last?.5:.11, last?.55:.35, 'square')]; },
+  // role reveals
+  hide(at){ const t=at; return [tone(t,110,55,.9,.6,'sawtooth'), tone(t+.05,220,110,.9,.25,'square'), tone(t+.9,330,330,.35,.35,'triangle')]; },
+  seek(at){ const t=at; return [tone(t,300,1200,.7,.45,'sawtooth'), tone(t+.7,1200,300,.7,.35,'sawtooth'), tone(t+1.4,880,880,.35,.4,'triangle')]; }
+};
+function play(name, ...a){
+  if(!sndOn()) return;
+  try{ unlockAudio(); if(actx) SND[name](actx.currentTime+.02, ...a); }catch(e){}
+}
+// Pre-schedule the final-10-seconds ticks and the ping tone on the audio clock.
+function scheduleCountdown(){
+  if(!actx || !state) return;
+  const key = (state.status==='running' && sndOn()) ? state.nextPing : null;
+  if(key === schedKey) return;
+  sched.forEach(o => { try{ o.stop(); }catch(e){} }); sched = []; schedKey = key; schedPingAt = 0;
+  if(key === null) return;
+  const rem = (state.nextPing - (Date.now()+skew)) / 1000, t = actx.currentTime;
+  for(let k=10; k>=1; k--){ const at = rem-k; if(at > 0.05) sched.push(...SND.tick(t+at, false)); }
+  if(rem > 0.05){ sched.push(...SND.ping(t+rem)); schedPingAt = Date.now() + rem*1000; }
+}
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState==='visible'){ schedKey = 'resync'; unlockAudio(); scheduleCountdown(); }
+});
+['pointerdown','touchstart','keydown'].forEach(ev => document.addEventListener(ev, () => { if(!actx || actx.state!=='running') unlockAudio(); }, {passive:true}));
+$('soundToggle').onchange = () => { schedKey = 'resync'; scheduleCountdown(); };
+$('testSnd').onclick = () => { play('ping'); setTimeout(()=>play('chat'), 1500); setTimeout(()=>play('tick',true), 2200); };
+
 // ---- location diagnostics ----
 const secureOk = window.isSecureContext && location.protocol !== 'file:';
 if(!secureOk) $('insecure').classList.remove('hidden');
@@ -328,7 +420,8 @@ function getFix(ok, bad){
   if(!secureOk || !navigator.geolocation){ bad(geoErr()); return; }
   navigator.geolocation.getCurrentPosition(ok, e => bad(geoErr(e)), {enableHighAccuracy:true, timeout:20000, maximumAge:0});
 }
-async function keepAwake(){ try{ if('wakeLock' in navigator) await navigator.wakeLock.request('screen'); }catch(e){} }
+let wakeLock = null;
+async function keepAwake(){ try{ if('wakeLock' in navigator && (!wakeLock || wakeLock.released)){ wakeLock = await navigator.wakeLock.request('screen'); } }catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && state && state.status==='running') keepAwake(); });
 window.addEventListener('pagehide',()=>{ try{ peer && peer.destroy(); }catch(e){} });
 
@@ -367,6 +460,7 @@ function commonPeer(){
 }
 
 $('create').onclick = async () => {
+  unlockAudio(); askNotify();
   me.name = $('name').value.trim() || 'Host'; store.set('mh_name', me.name); me.isHost = true;
   const chars='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; me.code=''; for(let i=0;i<4;i++) me.code+=chars[Math.floor(Math.random()*chars.length)];
   await getMic();
@@ -382,6 +476,7 @@ $('create').onclick = async () => {
 };
 
 $('joinbtn').onclick = async () => {
+  unlockAudio(); askNotify();
   me.name = $('name').value.trim() || 'Player'; store.set('mh_name', me.name); me.code = $('code').value.trim().toUpperCase();
   if(me.code.length!==4){ toast('Enter the 4-letter room code'); return; }
   await getMic();
@@ -555,6 +650,7 @@ function hostTick(){
 }
 $('pingNow').onclick = () => { if(me.isHost && state.status==='running') firePing(); };
 $('start').onclick = () => {
+  unlockAudio();
   resetChatHost();
   state.hideMin = Math.max(0, +$('hideMin').value||0); state.pingMin = Math.max(1, +$('pingMin').value||5);
   state.locs = {}; liveStore = {}; live = {}; state.pingN = 0; state.startAt = Date.now();
@@ -590,10 +686,19 @@ function applyState(s){
     setSheet(s.status!=='running');
     if(s.status==='running') showReveal();
     if(s.status==='lobby') seenAreas.clear();
+    if(s.status==='over'){ play('ping'); notify('Manhunt','The game is over.','over'); }
   }
   prevStatus = s.status;
-  render(); syncCalls();
-  if(pinged){ beep(); pingFx(); toast(me.team==='hider' ? 'Ping. Seekers got a rough circle around you.' : 'Ping. Hider circles are updating.'); }
+  render(); syncCalls(); scheduleCountdown();
+  if(pinged){
+    // the ping tone may already have been scheduled on the audio clock; only play it now if it wasn't
+    const pre = actx && actx.state==='running' && Math.abs(Date.now()-schedPingAt) < 4000;
+    if(!pre) play('ping');
+    if(navigator.vibrate) navigator.vibrate([200,100,200]);
+    pingFx();
+    const msg = me.team==='hider' ? 'Ping. Seekers got a rough circle around you.' : 'Ping. Hider circles are updating.';
+    toast(msg); notify('Manhunt ping', msg, 'ping');
+  }
   if(me.team==='seeker' && s.status==='running'){
     (s.areas||[]).forEach(a => {
       const k = a.clat.toFixed(5)+a.clng.toFixed(5)+a.m.map(x=>x.id+':'+x.n).join(',');
@@ -654,6 +759,8 @@ function showReveal(){
     ? 'Seekers get a 0.2 mile circle around you every '+state.pingMin+' min. Keep moving.'
     : 'Hiders show up as 0.2 mile circles every '+state.pingMin+' min. Your team shows live.';
   r.className = ''; void r.offsetWidth; r.classList.add('show');
+  play(h ? 'hide' : 'seek');
+  notify(h ? 'You are a HIDER' : 'You are a SEEKER', h ? 'Go hide. Keep moving.' : 'Hiders are hiding. Get ready.', 'role');
   if(navigator.vibrate) navigator.vibrate([120,60,120,60,300]);
   clearTimeout(showReveal._a); clearTimeout(showReveal._b);
   showReveal._a = setTimeout(() => r.classList.add('fade'), 3000);
@@ -856,6 +963,11 @@ function addChat(m, quiet){
   if(m.scope==='team' && m.team!==me.team) return;
   chatSeen.add(m.id); chatMsgs.push(m); if(chatMsgs.length>200) chatMsgs.shift();
   const tab = m.scope==='team' ? 'team' : 'all';
+  if(!quiet && m.from!==me.id){
+    play('chat');
+    notify(m.name+(m.scope==='team'?' (team)':''), m.text.slice(0,100), 'chat');
+    if(navigator.vibrate) navigator.vibrate(80);
+  }
   if(!quiet && m.from!==me.id && !(chatOpen && chatTab===tab)){ unread[tab]++; toast(m.name+': '+m.text.slice(0,60), 2500); }
   updateBadge(); if(chatOpen) renderChat();
 }
