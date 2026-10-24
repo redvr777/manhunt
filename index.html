@@ -823,6 +823,8 @@ let permsOk=false,afterGate=null;
 const notesSupported='Notification' in window;   // browsers with no notification support at all (some iPhones) cannot be asked, so it is not required there
 const PERMS=[['loc','Location','Live map and hider pings'],['cam','Camera','Spy photos and camera sharing'],['mic','Microphone','Team radio'],['note','Notifications','Pings and alerts while the app is in the background']];
 const permState={loc:'wait',cam:'wait',mic:'wait',note:'wait'};
+const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const inApp=/FBAN|FBAV|Instagram|Snapchat|Line\/|MicroMessenger|TikTok|Twitter|Discord|GSA\//.test(navigator.userAgent);
 function paintGate(){
   const ul=$('gateList');ul.innerHTML='';
   PERMS.forEach(([k,n,d])=>{const li=document.createElement('li'),i=document.createElement('div');i.className='gi';
@@ -830,7 +832,9 @@ function paintGate(){
     const st=permState[k],pl=document.createElement('span');pl.className='pill'+(st==='ok'?' ok':st==='denied'?' bad':'');pl.textContent=st==='ok'?'Allowed':st==='denied'?'Blocked':'Waiting';
     li.append(i,pl);ul.appendChild(li)});
   const anyDenied=PERMS.some(([k])=>permState[k]==='denied');
-  $('gateHelp').textContent=!secureOk?'This page must be opened over https. Host the file on Netlify, GitHub Pages or Cloudflare Pages.':anyDenied?'Something is blocked. Tap the lock or settings icon next to the address bar, set it to Allow, then come back. This screen rechecks automatically.':'';
+  $('gateHelp').textContent=!secureOk?'This page must be opened over https. Host the file on Netlify, GitHub Pages or Cloudflare Pages.'
+    :inApp?'You are inside another app’s built-in browser (Messages, Instagram, Discord and similar), which blocks location and camera. Tap the share or ••• button and choose Open in Safari.'
+    :anyDenied?(isIOS?'Blocked. On iPhone: 1) Settings, Privacy & Security, Location Services must be On, and Safari Websites set to While Using the App. 2) In Safari tap aA in the address bar, Website Settings, and set Location, Camera and Microphone to Allow. 3) Come back and tap Try again. If it is still blocked, reload the page.':'Something is blocked. Tap the lock or settings icon next to the address bar, set it to Allow, then come back. This screen rechecks automatically.'):'';
   $('gateBtn').textContent=anyDenied?'Try again':'Allow everything';
 }
 function showGate(){$('gate').classList.remove('hidden');paintGate()}
@@ -847,15 +851,15 @@ async function silentCheck(){
   return{loc,cam,mic,note};
 }
 function applySilent(m){
-  Object.keys(m).forEach(k=>{if(m[k]==='granted')permState[k]='ok';else if(m[k]==='denied')permState[k]='denied';else if(m[k]==='prompt'&&permState[k]!=='wait')permState[k]='wait'})}
+  Object.keys(m).forEach(k=>{if(m[k]==='granted')permState[k]='ok';else if(m[k]==='denied')permState[k]='denied';else if(m[k]==='prompt'&&permState[k]==='denied')permState[k]='wait'})}
 const tryMedia=c=>navigator.mediaDevices&&navigator.mediaDevices.getUserMedia?navigator.mediaDevices.getUserMedia(c).then(st=>{st.getTracks().forEach(t=>t.stop());return 'ok'}).catch(()=>'denied'):Promise.resolve('denied');
 async function askAll(){
   if(!secureOk){PERMS.forEach(([k])=>permState[k]='denied');paintGate();return}
   if(notesSupported&&Notification.permission==='default'){try{await Notification.requestPermission()}catch(e){}}   // first, while the tap still counts
   permState.note=!notesSupported||Notification.permission==='granted'?'ok':'denied';
   permState.loc=await new Promise(r=>{if(!navigator.geolocation)return r('denied');navigator.geolocation.getCurrentPosition(()=>r('ok'),e=>r(e.code===1?'denied':'ok'),{enableHighAccuracy:true,timeout:15000,maximumAge:60000})});
-  permState.cam=await tryMedia({video:true});
-  permState.mic=await tryMedia({audio:true});
+  const both=await tryMedia({video:true,audio:true});   // one prompt for both, which matters on iPhone
+  if(both==='ok'){permState.cam='ok';permState.mic='ok'}else{permState.cam=await tryMedia({video:true});permState.mic=await tryMedia({audio:true})}
   paintGate();checkPass();
 }
 $('gateBtn').onclick=()=>{audio();askAll()};
@@ -865,7 +869,7 @@ window.addEventListener('focus',()=>{if(!$('gate').classList.contains('hidden'))
 // if a permission is switched off while playing, the gate comes back over the game until it is allowed again
 setInterval(async()=>{
   const m=await silentCheck();let bad=false;
-  Object.keys(m).forEach(k=>{if(m[k]==='denied'||m[k]==='prompt'){permState[k]=m[k]==='denied'?'denied':'wait';bad=true}else if(m[k]==='granted')permState[k]='ok'});
+  Object.keys(m).forEach(k=>{if(m[k]==='denied'){permState[k]='denied';bad=true}else if(m[k]==='granted')permState[k]='ok'});
   if(bad&&entered){permsOk=false;showGate()}else if(!bad&&!permsOk&&!$('gate').classList.contains('hidden'))checkPass();
 },4000);
 (async()=>{applySilent(await silentCheck());if(!checkPass())showGate()})();
