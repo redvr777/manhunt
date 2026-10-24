@@ -156,6 +156,12 @@ a.btn{text-decoration:none;display:inline-block;text-align:center}.btn.recording
 #closed{position:fixed;inset:0;z-index:6500;background:#0d0f13;color:#f1f0ec;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px;gap:14px}
 #closed h2{margin:0;font:900 clamp(48px,15vw,90px)/.9 var(--disp);font-variation-settings:'wdth' 130;color:var(--hc)}
 #closed p{margin:0;max-width:30ch;color:#c8c5bb;font-size:17px}#closed .btn{max-width:320px;background:#f1f0ec;color:#101216}
+#srvList{list-style:none;margin:10px 0 0;padding:0}
+#srvList li{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #272b34;cursor:pointer}
+#srvList li.msg0{cursor:default;color:#8f94a0;font-size:14px}
+#srvList .si{flex:1;min-width:0}#srvList .sn{font:800 18px var(--disp);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#srvList .sm{font-size:13px;color:#9aa0ad}
+#srvList .lk{font:800 12px var(--disp);padding:4px 10px;border-radius:10px 3px 10px 3px;background:#272b34;color:#f1f0ec}
 @media (prefers-reduced-motion:reduce){*,*::before{animation:none!important;transition:none!important}#reveal.show{clip-path:none}}
 </style></head>
 <body data-theme="neutral">
@@ -168,9 +174,15 @@ a.btn{text-decoration:none;display:inline-block;text-align:center}.btn.recording
     <div class="pickrow"><div class="av" id="picPrev"></div><div><label class="pickbtn">Add photo<input type="file" id="picIn" accept="image/*" hidden></label><div class="small" style="margin-top:6px">Your avatar. Stays on this phone.</div></div></div>
     <label class="l" for="name">Your name</label><input type="text" id="name" maxlength="16" placeholder="Jake" autocomplete="off">
   </div>
-  <button class="btn" id="create">Host a game</button>
+  <div class="well"><label class="l" for="srvName" style="margin-top:0">Server name (shown in the list)</label>
+      <input type="text" id="srvName" maxlength="24" placeholder="Friday night manhunt" autocomplete="off">
+      <button class="btn" id="create" style="margin-top:14px">Host a game</button>
+      <div class="small" style="margin-top:8px">You get a passcode only you can see. Give it to the people you want to join.</div></div>
+    <div class="well"><div style="display:flex;align-items:center;gap:10px"><b style="flex:1;font:800 20px var(--disp)">Open servers</b><button class="btn ghost sm" id="srvRefresh">Refresh</button></div>
+      <ul id="srvList"></ul></div>
   <div class="well"><label class="l" for="code" style="margin-top:0">Got a room code?</label>
     <input type="text" id="code" class="codeIn" maxlength="4" placeholder="ABCD" autocomplete="off">
+    <label class="l" for="pass">Passcode (from the host)</label><input type="text" id="pass" class="codeIn" maxlength="6" inputmode="numeric" autocomplete="off" placeholder="000000">
     <button class="btn ghost" id="joinbtn" style="margin-top:14px">Join game</button></div>
   <p class="small"><b>How it works.</b> Hiders see every seeker live. Seekers only see a rough 0.2 mile circle around hiders each ping. One minute after each ping, every hider’s camera takes a photo that goes to the seekers with the hider’s name. Hiders: allow the camera when asked.</p>
   <p class="small"><b>Background.</b> Keep the Manhunt tab open and switch apps or lock the screen. Do not swipe it away. A closed page cannot run, no browser allows that.</p>
@@ -209,7 +221,7 @@ a.btn{text-decoration:none;display:inline-block;text-align:center}.btn.recording
         <div style="display:flex;gap:8px;margin-top:14px"><button class="btn ghost" id="rand">Randomize</button><button class="btn" id="start">Start game</button></div>
         <div class="small" style="margin-top:8px">Tap a player below to flip their team.</div>
       </div>
-      <div id="hostNote" class="small hidden" style="margin-top:12px"><b>Heads up:</b> you are the server. If you close or leave this page, the room closes for everyone and nobody can rejoin it. Locking the screen or switching apps is fine.</div>
+      <div id="hostNote" class="small hidden" style="margin-top:12px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;color:var(--tx)"><span>Passcode</span><b id="passShow" style="font:900 30px var(--disp);letter-spacing:.2em"></b><button class="btn ghost sm" id="passCopy">Copy</button></div>Only you can see this passcode. Give it to the people you want in. <b>Heads up:</b> you are the server. If you close or leave this page, the room closes for everyone and nobody can rejoin it. Locking the screen or switching apps is fine.</div>
       <div id="guestWait" class="small" style="margin-top:12px">Waiting for the host to start.</div>
     </div>
     <div id="actions"><button class="btn ghost hidden" id="pingNow">Ping now</button><button class="btn hot hidden" id="end">End game</button><button class="btn hidden" id="again">New round</button></div>
@@ -338,7 +350,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 window.addEventListener('online',wakeUp);window.addEventListener('pageshow',wakeUp);
 ['pointerdown','touchstart','keydown'].forEach(e=>document.addEventListener(e,()=>{if(!A||A.state!=='running')audio()},{passive:true}));
 setInterval(()=>{try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect();else if(peer&&peer.destroyed&&entered&&!me.isHost&&!recreating&&!roomClosed){recreating=true;newGuestPeer(0)}}catch(e){}},5000);
-setInterval(()=>{if(entered&&me.code)store.set('mh_sess',JSON.stringify({code:me.code,host:me.isHost,ts:Date.now()}))},30000);
+setInterval(()=>{if(entered&&me.code)store.set('mh_sess',JSON.stringify({code:me.code,host:me.isHost,pass:me.pass||'',ts:Date.now()}))},30000);
 $('soundToggle').onchange=()=>{schedKey='x';scheduleCountdown()};
 $('testSnd').onclick=()=>{play('ping');setTimeout(()=>play('snap'),1800);setTimeout(()=>play('seek'),3200)};
 
@@ -363,19 +375,20 @@ function commonPeer(){
 }
 async function startHost(code,restore){if(!permsOk){afterGate=()=>startHost(code,restore);showGate();return}
   me.isHost=true;me.code=code;store.set('mh_sess',JSON.stringify({code,host:true,ts:Date.now()}));await getMic();
-  peer=new Peer('manhunt-'+code);
+  peer=new Peer('manhunt-'+code);hostPass=String(Math.floor(100000+Math.random()*900000));beaconStop=false;peer.on('open',()=>{startBeacon(0);$('passShow').textContent=hostPass});
   peer.on('error',e=>toast(e.type==='unavailable-id'?'Code clash or old host still connected. Try again.':'Connection error: '+e.type));
   peer.on('open',id=>{me.id=id;
     if(restore&&restore.players){state=restore;state.hostId=id;Object.keys(state.players).forEach(k=>{if(k!==id){state.players[k].off=true;state.players[k].offAt=Date.now()}});state.players[id]=Object.assign(state.players[id]||{},{name:me.name,pic:me.pic,off:false})}
-    else state={status:'lobby',hostId:id,order:[id],players:{[id]:{name:me.name,team:'hider',pic:me.pic}},hideMin:5,pingMin:2,startAt:0,nextPing:0,photoAt:0,pingN:0,locs:{}};
+    else state={name:srvName,status:'lobby',hostId:id,order:[id],players:{[id]:{name:me.name,team:'hider',pic:me.pic}},hideMin:5,pingMin:2,startAt:0,nextPing:0,photoAt:0,pingN:0,locs:{}};
     broadcast()});
   commonPeer();
 }
-$('create').onclick=()=>{audio();askNotify();me.name=$('name').value.trim()||'Host';store.set('mh_name',me.name);
+$('create').onclick=()=>{audio();askNotify();me.name=$('name').value.trim()||'Host';srvName=($('srvName').value.trim()||me.name+'’s game').slice(0,24);store.set('mh_name',me.name);
   const ch='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let c='';for(let i=0;i<4;i++)c+=ch[Math.floor(Math.random()*ch.length)];startHost(c)};
 async function doJoin(){if(!permsOk){afterGate=doJoin;showGate();return}audio();askNotify();me.name=$('name').value.trim()||'Player';store.set('mh_name',me.name);me.code=$('code').value.trim().toUpperCase();
   if(me.code.length!==4){toast('Enter the 4-letter room code');return}
-  await getMic();store.set('mh_sess',JSON.stringify({code:me.code,host:false,ts:Date.now()}));newGuestPeer(0)}
+  me.pass=$('pass').value.trim();me.denied=false;if(me.pass.length<4){toast('Enter the passcode from the host');return}
+  await getMic();store.set('mh_sess',JSON.stringify({code:me.code,host:false,pass:me.pass,ts:Date.now()}));newGuestPeer(0)}
 $('joinbtn').onclick=doJoin;
 function newGuestPeer(tries){
   try{if(peer&&!peer.destroyed)peer.destroy()}catch(e){}
@@ -384,25 +397,35 @@ function newGuestPeer(tries){
     if(e.type==='unavailable-id'&&tries<15){setTimeout(()=>newGuestPeer(tries+1),3000);return}
     if(e.type==='peer-unavailable'){if(!entered){toast('Room not found');store.set('mh_sess','')}return}
     if(!entered)toast('Connection error: '+e.type)});
-  peer.on('open',id=>{me.id=id;recreating=false;connectToHost('manhunt-'+me.code,ok=>{if(!ok&&!entered){toast('Could not join that room');store.set('mh_sess','')}else if(!ok)attemptReconnect()})});
+  peer.on('open',id=>{me.id=id;recreating=false;connectToHost('manhunt-'+me.code,ok=>{if(!ok&&!entered){toast(me.denied?'Wrong passcode. Ask the host.':'Could not join that room');store.set('mh_sess','');try{peer.destroy()}catch(e){}}else if(!ok)attemptReconnect()})});
   commonPeer();
 }
 function connectToHost(hid,cb){
   const c=peer.connect(hid,{reliable:true});let done=false;
   const fail=()=>{if(done)return;done=true;clearTimeout(to);try{c.close()}catch(e){}cb&&cb(false)};const to=setTimeout(fail,6000);
-  c.on('open',()=>c.send({t:'hello',name:me.name,pic:me.pic}));
+  c.on('open',()=>c.send({t:'hello',name:me.name,pic:me.pic,pass:me.pass}));
   c.on('data',d=>{
     if(d.t==='state'){if(!done){done=true;clearTimeout(to);hostConn=c;cb&&cb(true)}applyState(d.s)}
     else if(d.t==='ping')doPing();else if(d.t==='snap')doSnap(d.n);
     else if(d.t==='live'){live[d.id]=d.l;drawLive()}else if(d.t==='liveoff'){delete live[d.id];drawLive()}
     else if(d.t==='photo')addPhoto(d.p,false);else if(d.t==='photos')(d.list||[]).forEach(p=>addPhoto(p,true));
     else if(d.t==='chat')addChat(d.m);else if(d.t==='chathist')(d.list||[]).forEach(m=>addChat(m,true));
-    else if(d.t==='chatreset')resetTeamChat();else if(d.t==='closed'){closeRoom(d.why)}else if(d.t==='wait')fail()});
+    else if(d.t==='chatreset')resetTeamChat();else if(d.t==='closed'){closeRoom(d.why)}else if(d.t==='denied'){me.denied=true;fail()}else if(d.t==='wait')fail()});
   c.on('close',()=>{clearTimeout(to);if(hostConn===c){hostConn=null;onHostLost()}else fail()});c.on('error',fail);
 }
 
 /* ===== host logic ===== */
-function hostAccept(c){c.on('open',()=>{conns[c.peer]=c});c.on('data',d=>hostHandle(c.peer,d));c.on('close',()=>{if(conns[c.peer]===c){delete conns[c.peer];if(state.players[c.peer]){state.players[c.peer].off=true;state.players[c.peer].offAt=Date.now();delete liveStore[c.peer]}broadcast()}})}
+function hostAccept(c){
+  c.on('data',d=>{
+    if(d&&d.t==='peek'){try{c.send({t:'info',i:pubInfo()})}catch(e){}return}
+    if(conns[c.peer]!==c){   // not let in yet: only a correct passcode opens the door, nothing else is answered
+      if(!d||d.t!=='hello')return;
+      if((badTries[c.peer]||0)>=5||String(d.pass||'')!==hostPass){badTries[c.peer]=(badTries[c.peer]||0)+1;try{c.send({t:'denied'})}catch(e){}setTimeout(()=>{try{c.close()}catch(e){}},400);return}
+      conns[c.peer]=c;
+    }
+    hostHandle(c.peer,d)});
+  c.on('close',()=>{if(conns[c.peer]===c){delete conns[c.peer];if(state.players[c.peer]){state.players[c.peer].off=true;state.players[c.peer].offAt=Date.now();delete liveStore[c.peer]}broadcast()}});
+}
 function fuzz(lat,lng){const a=Math.random()*6.2832,d=Math.sqrt(Math.random())*FUZZ;return[lat+d*Math.cos(a)/111320,lng+d*Math.sin(a)/(111320*Math.cos(lat*Math.PI/180))]}
 function hostHandle(pid,d){
   if(d.t==='live'||d.t==='liveoff'){onLive(pid,d);return}
@@ -623,7 +646,8 @@ function fitMap(){if(!map||!state)return false;const pts=[];Object.values(live).
 $('fit').onclick=fitMap;
 $('locme').onclick=()=>getFix(p=>{const ll=[p.coords.latitude,p.coords.longitude];if(meMarker)meMarker.setLatLng(ll);else meMarker=L.circleMarker(ll,{radius:8,color:'#fff',weight:2,fillColor:'#3ecf8e',fillOpacity:1}).addTo(map);map.setView(ll,17)},c=>toast(geoHelp(c),9000));
 $('testLoc').onclick=()=>{const e=$('geoStatus');e.textContent='Checking…';getFix(p=>{e.textContent='Location works (within '+Math.round(p.coords.accuracy)+' m).'},c=>{e.textContent=geoHelp(c)})};
-$('share').onclick=async()=>{const url=location.origin+location.pathname+'?room='+me.code;try{if(navigator.share)await navigator.share({title:'Manhunt',text:'Join my manhunt game',url});else{await navigator.clipboard.writeText(url);toast('Invite link copied')}}catch(e){}};
+$('share').onclick=async()=>{const url=location.origin+location.pathname+'?room='+me.code,text='Join my manhunt game. Room '+me.code+', passcode '+(me.isHost?hostPass:me.pass);
+  try{if(navigator.share)await navigator.share({title:'Manhunt',text,url});else{await navigator.clipboard.writeText(text+' '+url);toast('Invite copied')}}catch(e){}};
 
 /* ===== chat ===== */
 let chatOpen=false,chatTab='team';const chatSeen=new Set(),unread={team:0,all:0},lastChat={};
@@ -684,6 +708,7 @@ function hostClose(){   // host side: tell everyone, then take the room code off
   if(!me.isHost||!state||hostClosing)return;hostClosing=true;
   Object.values(conns).forEach(c=>{try{c.send({t:'closed',why:'The host left, so this room is closed.'})}catch(e){}});
   store.set('mh_sess','');store.set('mh_host','');
+  beaconStop=true;try{if(beacon)beacon.destroy()}catch(e){}
   try{peer.destroy()}catch(e){}
 }
 window.addEventListener('pagehide',hostClose);window.addEventListener('beforeunload',hostClose);
@@ -845,10 +870,46 @@ setInterval(async()=>{
 },4000);
 (async()=>{applySilent(await silentCheck());if(!checkPass())showGate()})();
 
+/* ===== SERVER LIST + PASSCODE =====
+   Each hosted room also runs a tiny "beacon" on a numbered slot (mhdir-0 to mhdir-39). The list scans those slots and
+   asks each one for its public card: name, host, player count, status. Joining still needs the host's passcode, which is
+   checked on the host's phone. Without it the host answers nothing except that public card. */
+let srvName='',hostPass='',beacon=null,beaconStop=false,lister=null;const badTries={};
+function pubInfo(){return{code:me.code,name:(state&&state.name)||'Manhunt',host:me.name,n:state?Object.values(state.players).filter(p=>!p.off).length:1,status:state?state.status:'lobby'}}
+function startBeacon(i){
+  if(i>=40||beaconStop)return;const b=new Peer('mhdir-'+i);
+  b.on('open',()=>{beacon=b});
+  b.on('connection',c=>c.on('data',d=>{if(d&&d.t==='peek'&&state){try{c.send({t:'info',i:pubInfo()})}catch(e){}}}));
+  b.on('disconnected',()=>setTimeout(()=>{try{if(!b.destroyed)b.reconnect()}catch(e){}},1000));
+  b.on('error',e=>{if(e.type==='unavailable-id'){try{b.destroy()}catch(_){}startBeacon(i+1)}});
+}
+$('passCopy').onclick=async()=>{try{await navigator.clipboard.writeText(hostPass);toast('Passcode copied')}catch(e){toast('Passcode: '+hostPass)}};
+function paintServers(found,final){
+  const ul=$('srvList');ul.innerHTML='';const list=Object.values(found).sort((a,b)=>a.name.localeCompare(b.name));
+  if(!list.length){const li=document.createElement('li');li.className='msg0';li.textContent=final?'No open servers right now. Host one, or type a room code below.':'Searching…';ul.appendChild(li);return}
+  list.forEach(i=>{const li=document.createElement('li'),d=document.createElement('div');d.className='si';
+    const n=document.createElement('div');n.className='sn';n.textContent=i.name;const m=document.createElement('div');m.className='sm';
+    m.textContent=i.host+' · '+i.n+(i.n===1?' player':' players')+' · '+(i.status==='lobby'?'Lobby':i.status==='running'?'In game':'Over');
+    d.append(n,m);const lk=document.createElement('span');lk.className='lk';lk.textContent='Passcode';li.append(d,lk);
+    li.onclick=()=>{$('code').value=i.code;$('pass').value='';$('pass').focus();toast('Enter the passcode from '+i.host)};ul.appendChild(li)})}
+function scanServers(){
+  if(entered||roomClosed)return;paintServers({},false);
+  try{if(lister)lister.destroy()}catch(e){}
+  const found={};lister=new Peer();lister.on('error',()=>{});   // "peer-unavailable" just means that slot is empty
+  lister.on('open',()=>{
+    for(let i=0;i<40;i++){const c=lister.connect('mhdir-'+i,{reliable:true});const t=setTimeout(()=>{try{c.close()}catch(e){}},4000);
+      c.on('open',()=>c.send({t:'peek'}));
+      c.on('data',d=>{if(d&&d.t==='info'&&d.i&&d.i.code){found[d.i.code]=d.i;clearTimeout(t);try{c.close()}catch(e){}paintServers(found,false)}})}
+    setTimeout(()=>{paintServers(found,true);try{lister.destroy()}catch(e){}},4500)});
+}
+$('srvRefresh').onclick=scanServers;
+setInterval(()=>{if(!entered&&!roomClosed&&!document.hidden)scanServers()},20000);
+scanServers();
+
 /* ===== auto-resume after reload or discarded tab (host restores the saved game) ===== */
 (function(){try{const s=JSON.parse(store.get('mh_sess')||'null'),want=params.get('room')?params.get('room').toUpperCase():null;
   if(s&&s.code&&Date.now()-s.ts<12*3600e3&&(!want||want===s.code)){resumed=true;me.name=store.get('mh_name')||'Player';toast('Rejoining '+s.code+'…',5000);
     if(s.host){store.set('mh_sess','');store.set('mh_host','');toast('Your last room closed when you left it.',5000)}
-    else{$('code').value=s.code;doJoin()}
+    else{$('code').value=s.code;$('pass').value=s.pass||'';doJoin()}
     setTimeout(()=>{resumed=false},8000)}}catch(e){}})();
 </script></body></html>
