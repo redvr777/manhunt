@@ -153,6 +153,9 @@ a.btn{text-decoration:none;display:inline-block;text-align:center}.btn.recording
 .pill.ok{background:#3ecf8e;color:#03150c}.pill.bad{background:#ff5b1f;color:#1a0600}
 #gateHelp{margin-bottom:14px;color:#ffcdb8}
 #gate .btn{background:#f1f0ec;color:#101216}
+#closed{position:fixed;inset:0;z-index:6500;background:#0d0f13;color:#f1f0ec;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px;gap:14px}
+#closed h2{margin:0;font:900 clamp(48px,15vw,90px)/.9 var(--disp);font-variation-settings:'wdth' 130;color:var(--hc)}
+#closed p{margin:0;max-width:30ch;color:#c8c5bb;font-size:17px}#closed .btn{max-width:320px;background:#f1f0ec;color:#101216}
 @media (prefers-reduced-motion:reduce){*,*::before{animation:none!important;transition:none!important}#reveal.show{clip-path:none}}
 </style></head>
 <body data-theme="neutral">
@@ -206,6 +209,7 @@ a.btn{text-decoration:none;display:inline-block;text-align:center}.btn.recording
         <div style="display:flex;gap:8px;margin-top:14px"><button class="btn ghost" id="rand">Randomize</button><button class="btn" id="start">Start game</button></div>
         <div class="small" style="margin-top:8px">Tap a player below to flip their team.</div>
       </div>
+      <div id="hostNote" class="small hidden" style="margin-top:12px"><b>Heads up:</b> you are the server. If you close or leave this page, the room closes for everyone and nobody can rejoin it. Locking the screen or switching apps is fine.</div>
       <div id="guestWait" class="small" style="margin-top:12px">Waiting for the host to start.</div>
     </div>
     <div id="actions"><button class="btn ghost hidden" id="pingNow">Ping now</button><button class="btn hot hidden" id="end">End game</button><button class="btn hidden" id="again">New round</button></div>
@@ -250,6 +254,7 @@ a.btn{text-decoration:none;display:inline-block;text-align:center}.btn.recording
   <div id="gateHelp" class="small"></div>
   <button class="btn" id="gateBtn">Allow everything</button>
 </div></div>
+<div id="closed" class="hidden"><h2>ROOM CLOSED</h2><p id="closedMsg"></p><p class="small" style="color:#8f94a0">This room can’t be rejoined. Ask the host to start a new one.</p><button class="btn" id="closedBtn">Back to start</button></div>
 <div id="reveal" class="hidden"><div id="rvWord"></div><div id="rvSub"></div></div>
 <div id="toast" class="hidden"></div><div id="audios"></div><video id="snapV" playsinline muted autoplay></video>
 
@@ -326,13 +331,13 @@ async function keepAwake(){try{if('wakeLock' in navigator&&(!wakeLock||wakeLock.
 function notify(t,b,tag){if(!document.hidden)return;try{if('Notification' in window&&Notification.permission==='granted')new Notification(t,{body:b,tag:tag||'mh',renotify:true})}catch(e){}}
 const askNotify=()=>{try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission()}catch(e){}};
 // a Worker's clock is throttled far less than page timers, so pings and the countdown keep ticking in the background
-let wk;try{wk=new Worker(URL.createObjectURL(new Blob(['setInterval(()=>postMessage(1),1000)'])));wk.onmessage=()=>{hostTick();tick();if(entered&&me.isHost&&++saveN%5==0)store.set('mh_host',JSON.stringify(state))}}catch(e){setInterval(()=>{hostTick();tick()},1000)}
+let wk;try{wk=new Worker(URL.createObjectURL(new Blob(['setInterval(()=>postMessage(1),1000)'])));wk.onmessage=()=>{hostTick();tick()}}catch(e){setInterval(()=>{hostTick();tick()},1000)}
 let saveN=0;
-function wakeUp(){try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(e){} if(document.visibilityState==='visible'&&state&&state.status==='running'){keepAwake();snapCam()} audio(); schedKey='x'; scheduleCountdown(); if(entered&&!me.isHost&&!hostConn&&!migrating){reconUntil=Date.now()+45000;attemptReconnect()}}
+function wakeUp(){try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(e){} if(document.visibilityState==='visible'&&state&&state.status==='running'){keepAwake();snapCam()} audio(); schedKey='x'; scheduleCountdown(); if(entered&&!me.isHost&&!hostConn&&!roomClosed){attemptReconnect()}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')wakeUp()});
 window.addEventListener('online',wakeUp);window.addEventListener('pageshow',wakeUp);
 ['pointerdown','touchstart','keydown'].forEach(e=>document.addEventListener(e,()=>{if(!A||A.state!=='running')audio()},{passive:true}));
-setInterval(()=>{try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect();else if(peer&&peer.destroyed&&entered&&!me.isHost&&!recreating){recreating=true;newGuestPeer(0)}}catch(e){}},5000);
+setInterval(()=>{try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect();else if(peer&&peer.destroyed&&entered&&!me.isHost&&!recreating&&!roomClosed){recreating=true;newGuestPeer(0)}}catch(e){}},5000);
 setInterval(()=>{if(entered&&me.code)store.set('mh_sess',JSON.stringify({code:me.code,host:me.isHost,ts:Date.now()}))},30000);
 $('soundToggle').onchange=()=>{schedKey='x';scheduleCountdown()};
 $('testSnd').onclick=()=>{play('ping');setTimeout(()=>play('snap'),1800);setTimeout(()=>play('seek'),3200)};
@@ -392,7 +397,7 @@ function connectToHost(hid,cb){
     else if(d.t==='live'){live[d.id]=d.l;drawLive()}else if(d.t==='liveoff'){delete live[d.id];drawLive()}
     else if(d.t==='photo')addPhoto(d.p,false);else if(d.t==='photos')(d.list||[]).forEach(p=>addPhoto(p,true));
     else if(d.t==='chat')addChat(d.m);else if(d.t==='chathist')(d.list||[]).forEach(m=>addChat(m,true));
-    else if(d.t==='chatreset')resetTeamChat();else if(d.t==='redirect'){done=true;clearTimeout(to);c.close();connectToHost(d.id,cb)}else if(d.t==='wait')fail()});
+    else if(d.t==='chatreset')resetTeamChat();else if(d.t==='closed'){closeRoom(d.why)}else if(d.t==='wait')fail()});
   c.on('close',()=>{clearTimeout(to);if(hostConn===c){hostConn=null;onHostLost()}else fail()});c.on('error',fail);
 }
 
@@ -555,7 +560,7 @@ function setSheet(o){sheetOpen=o;$('sheet').classList.toggle('open',o)}$('sheetB
 function render(){
   const s=state,lobby=s.status==='lobby';document.body.dataset.theme=lobby?'neutral':me.team;
   $('status').textContent={lobby:'Lobby',running:'Live',over:'Over'}[s.status];
-  $('hostSettings').classList.toggle('hidden',!(me.isHost&&lobby));$('guestWait').classList.toggle('hidden',me.isHost||!lobby);$('lobbyBox').classList.toggle('hidden',!lobby);
+  $('hostSettings').classList.toggle('hidden',!(me.isHost&&lobby));$('hostNote').classList.toggle('hidden',!me.isHost);$('guestWait').classList.toggle('hidden',me.isHost||!lobby);$('lobbyBox').classList.toggle('hidden',!lobby);
   $('end').classList.toggle('hidden',!(me.isHost&&s.status==='running'));$('pingNow').classList.toggle('hidden',!(me.isHost&&s.status==='running'));$('again').classList.toggle('hidden',!(me.isHost&&s.status==='over'));
   $('teamTxt').textContent=lobby?'Right now you are a '+me.team:(me.team==='hider'?"You're hiding":"You're seeking");
   $('rule').textContent=me.team==='hider'?`You see every seeker live. Seekers see a rough 0.2 mile circle around you every ${s.pingMin} min, and your camera photo 1 min later.`:`You see fellow seekers live. Hiders appear only as 0.2 mile circles every ${s.pingMin} min, followed by a photo of each.`;
@@ -657,49 +662,32 @@ function talk(on){if(!localStream)return;localStream.getAudioTracks().forEach(t=
 const ptt=$('ptt');ptt.addEventListener('pointerdown',e=>{e.preventDefault();ptt.setPointerCapture(e.pointerId);talk(true)});
 ['pointerup','pointercancel'].forEach(ev=>ptt.addEventListener(ev,()=>talk(false)));ptt.addEventListener('contextmenu',e=>e.preventDefault());
 
-/* ===== host migration: reconnect for 45s first, then the next player in line becomes host ===== */
+/* ===== room lifetime: the host's page IS the server, so when the host leaves, the room closes for good ===== */
 const CFG={photonPunAppId:'e311f009-c6be-433f-bda5-ee47fe131d88',photonVoiceAppId:'03e1ff28-3112-4a10-a254-8230478e742e'}; // reserved for a future Unity/PUN2 build
-let reconUntil=0,migrating=false,reconTimer=null,lobbyPeer=null;
-function onHostLost(){if(migrating||!state||me.isHost)return;if(!reconUntil||Date.now()>reconUntil)reconUntil=Date.now()+45000;attemptReconnect()}
-function attemptReconnect(){
-  if(me.isHost||hostConn||!state||migrating||reconBusy)return;
-  clearTimeout(reconTimer);if(!reconUntil)reconUntil=Date.now()+45000;
-  if(Date.now()>reconUntil){reconUntil=0;startMigration();return}
+let reconUntil=0,reconTimer=null,roomClosed=false,hostClosing=false;
+function onHostLost(){if(roomClosed||!state||me.isHost)return;if(!reconUntil||Date.now()>reconUntil)reconUntil=Date.now()+120000;attemptReconnect()}
+function attemptReconnect(){   // a locked or backgrounded host gets 2 minutes to come back; a host that left sends "closed" instantly
+  if(me.isHost||hostConn||!state||roomClosed||reconBusy)return;
+  clearTimeout(reconTimer);if(!reconUntil)reconUntil=Date.now()+120000;
+  if(Date.now()>reconUntil){closeRoom('The host is gone, so this room is closed.');return}
   reconBusy=true;try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(e){}
   connectToHost(state.hostId,ok=>{reconBusy=false;if(ok){reconUntil=0;toast('Back in the game')}else reconTimer=setTimeout(attemptReconnect,2500)});
 }
-function startMigration(){
-  if(migrating||!state||me.isHost)return;migrating=true;toast('Host left. Choosing a new host…',6000);
-  const old=state.hostId,cands=state.order.filter(id=>id!==old&&state.players[id]&&!state.players[id].off);tryCandidate(cands,0,old);
+function closeRoom(msg){   // guest side: shut everything down and block any way back in
+  if(roomClosed||me.isHost)return;roomClosed=true;entered=false;state=null;
+  store.set('mh_sess','');
+  try{stopWatch();stopSnapCam();if(camStream)stopCam();if(wakeLock)wakeLock.release()}catch(e){}
+  try{if(keepEl)keepEl.pause();if(peer)peer.destroy()}catch(e){}
+  hostConn=null;$('closedMsg').textContent=msg||'The host left, so this room is closed.';$('closed').classList.remove('hidden');
 }
-function tryCandidate(cands,i,old){
-  if(i>=cands.length){migrating=false;toast('No host available. The game ended.',10000);return}
-  const id=cands[i];if(id===me.id){promote(old);return}
-  let tries=0;const go=()=>connectToHost(id,ok=>{
-    if(ok){migrating=false;toast('New host: '+(state.players[id]?.name||'?'));return}
-    if(++tries<4)setTimeout(go,2000);else tryCandidate(cands,i+1,old)});
-  setTimeout(go,1500);
+function hostClose(){   // host side: tell everyone, then take the room code offline so it cannot be joined again
+  if(!me.isHost||!state||hostClosing)return;hostClosing=true;
+  Object.values(conns).forEach(c=>{try{c.send({t:'closed',why:'The host left, so this room is closed.'})}catch(e){}});
+  store.set('mh_sess','');store.set('mh_host','');
+  try{peer.destroy()}catch(e){}
 }
-function promote(old){
-  me.isHost=true;migrating=false;
-  state.nextPing-=skew;state.startAt-=skew;if(state.photoAt)state.photoAt-=skew;   // old host's clock to mine
-  state.hostId=me.id;state.epoch=(state.epoch||0)+1;
-  Object.values(state.locs||{}).forEach(a=>a.forEach(e=>{if(e.lat===undefined&&e.clat!==undefined){e.lat=e.clat;e.lng=e.clng}}));   // circles stay where seekers saw them
-  delete state.live;delete state.areas;
-  liveStore=Object.assign({},live);chatLog=chatMsgs.slice();
-  if(state.players[old])removeOrOff(old);
-  Object.keys(conns).forEach(k=>delete conns[k]);
-  store.set('mh_sess',JSON.stringify({code:me.code,host:true,ts:Date.now()}));
-  startLobbyPeer(0);toast('You are now the host',6000);broadcast();setTimeout(prune,12000);
-}
-function startLobbyPeer(n){   // keeps the room code working for late joiners after migration
-  if(n>15)return;const lp=new Peer('manhunt-'+me.code);
-  lp.on('open',()=>{lobbyPeer=lp});
-  lp.on('connection',c=>c.on('open',()=>{c.send({t:'redirect',id:me.id});setTimeout(()=>c.close(),800)}));
-  lp.on('error',e=>{if(e.type==='unavailable-id'){try{lp.destroy()}catch(_){}setTimeout(()=>startLobbyPeer(n+1),4000)}});
-}
-function removeOrOff(id){if(!state.players[id])return;delete liveStore[id];state.players[id].off=true;state.players[id].offAt=Date.now()}
-function prune(){let ch=false;Object.keys(state.players).forEach(id=>{if(id!==me.id&&!(conns[id]&&conns[id].open)&&!state.players[id].off){removeOrOff(id);ch=true}});if(ch)broadcast()}
+window.addEventListener('pagehide',hostClose);window.addEventListener('beforeunload',hostClose);
+$('closedBtn').onclick=()=>{location.href=location.pathname};
 
 /* ===== extras: area pulse for seekers, space bar talks ===== */
 const seenAreas=new Set();
@@ -860,7 +848,7 @@ setInterval(async()=>{
 /* ===== auto-resume after reload or discarded tab (host restores the saved game) ===== */
 (function(){try{const s=JSON.parse(store.get('mh_sess')||'null'),want=params.get('room')?params.get('room').toUpperCase():null;
   if(s&&s.code&&Date.now()-s.ts<12*3600e3&&(!want||want===s.code)){resumed=true;me.name=store.get('mh_name')||'Player';toast('Rejoining '+s.code+'…',5000);
-    if(s.host){let r=null;try{r=JSON.parse(store.get('mh_host')||'null')}catch(e){}startHost(s.code,r)}
+    if(s.host){store.set('mh_sess','');store.set('mh_host','');toast('Your last room closed when you left it.',5000)}
     else{$('code').value=s.code;doJoin()}
     setTimeout(()=>{resumed=false},8000)}}catch(e){}})();
 </script></body></html>
