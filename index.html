@@ -406,7 +406,8 @@ body[data-theme=seeker]{--map:invert(1) sepia(1) hue-rotate(150deg) brightness(.
     <div id="teambar"><div class="av" id="meAv" style="width:40px;height:40px"></div><div id="teamTxt"></div><label class="btn ghost sm" style="cursor:pointer;margin:0">Photo<input type="file" id="picIn2" accept="image/*" hidden></label></div>
     <button class="btn ghost hidden" id="adminSwitch" style="margin-top:10px">Admin: switch team</button><div id="rule"></div>
     <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="liveToggle" checked>Share my live location (seekers show live to everyone, hiders only show live to other hiders)</label>
-    <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="soundToggle" checked>Game sounds</label><div class="small" style="margin-top:-4px;margin-bottom:8px">Real sound effects stream from Mixkit, so an internet connection is needed.</div>
+    <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="soundToggle" checked>Game sounds</label>
+    <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="musicToggle" checked>Lobby music</label><div class="small" style="margin-top:-4px;margin-bottom:8px">Natural sound effects and cinematic lobby music stream from Mixkit, so an internet connection is needed.</div>
     <div id="lobbyBox">
       <div class="row" style="margin-top:6px"><button class="btn ghost" id="testLoc">Test location</button><button class="btn ghost" id="testSnd">Test sounds</button></div>
       <div class="small" id="geoStatus" style="margin-top:6px"></div>
@@ -639,18 +640,34 @@ const SND={
   pttOff(t){const v=V();hiss(v,t,{f:2000,q:1.5,d:.08,g:.25});note(v,t,{f:700,f2:500,sl:.04,d:.06,g:.09,a:.001});return v}
 };
 const REAL_SOUNDS={
-  ping:'https://assets.mixkit.co/active_storage/sfx/911/911-preview.mp3',
+  ping:'https://assets.mixkit.co/active_storage/sfx/2582/2582-preview.mp3',
   tick:'https://assets.mixkit.co/active_storage/sfx/1061/1061-preview.mp3',
   snap:'https://assets.mixkit.co/active_storage/sfx/1133/1133-preview.mp3',
   chat:'https://assets.mixkit.co/active_storage/sfx/2356/2356-preview.mp3',
-  hide:'https://assets.mixkit.co/active_storage/sfx/1492/1492-preview.mp3',
-  seek:'https://assets.mixkit.co/active_storage/sfx/2908/2908-preview.mp3',
-  over:'https://assets.mixkit.co/active_storage/sfx/2299/2299-preview.mp3',
+  hide:'https://assets.mixkit.co/active_storage/sfx/2605/2605-preview.mp3',
+  seek:'https://assets.mixkit.co/active_storage/sfx/2299/2299-preview.mp3',
+  over:'https://assets.mixkit.co/active_storage/sfx/2180/2180-preview.mp3',
   pttOn:'https://assets.mixkit.co/active_storage/sfx/1457/1457-preview.mp3',
   pttOff:'https://assets.mixkit.co/active_storage/sfx/911/911-preview.mp3'
 };
 const soundLevels={ping:.78,tick:.38,snap:.65,chat:.5,hide:.72,seek:.85,over:.7,pttOn:.35,pttOff:.28};
 const soundCache={};
+const lobbyMusic=new Audio('https://assets.mixkit.co/music/614/614.mp3');
+lobbyMusic.loop=true;lobbyMusic.preload='auto';lobbyMusic.volume=0;
+let musicFade=null,musicWanted=false;
+function syncLobbyMusic(){
+  const shouldPlay=!!($('musicToggle')&&$('musicToggle').checked&&sndOn()&&state&&state.status==='lobby');
+  if(shouldPlay===musicWanted&&((shouldPlay&&!lobbyMusic.paused)||(!shouldPlay&&lobbyMusic.paused)))return;
+  musicWanted=shouldPlay;
+  if(musicFade)clearInterval(musicFade);
+  if(shouldPlay){
+    lobbyMusic.play().then(()=>{
+      let v=lobbyMusic.volume;musicFade=setInterval(()=>{v=Math.min(.24,v+.025);lobbyMusic.volume=v;if(v>=.24){clearInterval(musicFade);musicFade=null}},80);
+    }).catch(()=>{});
+  }else{
+    let v=lobbyMusic.volume;musicFade=setInterval(()=>{v=Math.max(0,v-.04);lobbyMusic.volume=v;if(v<=0){clearInterval(musicFade);musicFade=null;lobbyMusic.pause();lobbyMusic.currentTime=0}},50);
+  }
+}
 function play(n){
   if(!sndOn())return;
   const url=REAL_SOUNDS[n];if(!url)return;
@@ -688,12 +705,13 @@ const askNotify=()=>{try{if('Notification' in window&&Notification.permission===
 let wk;try{wk=new Worker(URL.createObjectURL(new Blob(['setInterval(()=>postMessage(1),1000)'])));wk.onmessage=()=>{hostTick();tick()}}catch(e){setInterval(()=>{hostTick();tick()},1000)}
 let saveN=0;
 function wakeUp(){try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(e){} if(document.visibilityState==='visible'&&state&&state.status==='running'){keepAwake();snapCam()} audio(); schedKey='x'; scheduleCountdown(); if(entered&&!me.isHost&&!hostConn&&!roomClosed){attemptReconnect()}}
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')wakeUp()});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){wakeUp();syncLobbyMusic()}else if(state&&state.status!=='lobby'){lobbyMusic.pause()}});
 window.addEventListener('online',wakeUp);window.addEventListener('pageshow',wakeUp);
-['pointerdown','touchstart','keydown'].forEach(e=>document.addEventListener(e,()=>{if(!A||A.state!=='running')audio()},{passive:true}));
+['pointerdown','touchstart','keydown'].forEach(e=>document.addEventListener(e,()=>{if(!A||A.state!=='running')audio();syncLobbyMusic()},{passive:true}));
 setInterval(()=>{try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect();else if(peer&&peer.destroyed&&entered&&!me.isHost&&!recreating&&!roomClosed){recreating=true;newGuestPeer(0)}}catch(e){}},5000);
 setInterval(()=>{if(entered&&me.code)store.set('mh_sess',JSON.stringify({code:me.code,host:me.isHost,pass:me.pass||'',ts:Date.now()}))},30000);
-$('soundToggle').onchange=()=>{schedKey='x';scheduleCountdown()};
+$('soundToggle').onchange=()=>{schedKey='x';scheduleCountdown();syncLobbyMusic()};
+$('musicToggle').onchange=syncLobbyMusic;
 $('testSnd').onclick=()=>{play('ping');setTimeout(()=>play('snap'),2400);setTimeout(()=>play('chat'),3600);setTimeout(()=>play('seek'),4400)};
 
 /* ===== profile ===== */
@@ -900,7 +918,7 @@ function applyState(s){
     if(s.status==='running'&&!resumed){showReveal();photos=me.isHost?photos:[];renderGal()}
     if(s.status==='lobby'){photos=me.isHost?[]:[];renderGal()}
     if(s.status==='over'){play('over');notify('Manhunt','The game is over.','over')}}
-  prevStatus=s.status;if(teamChanged)showReveal();render();syncCalls();scheduleCountdown();syncCam();seekerPulse(s);
+  prevStatus=s.status;syncLobbyMusic();if(teamChanged)showReveal();render();syncCalls();scheduleCountdown();syncCam();seekerPulse(s);
   if(pinged){const pre=A&&A.state==='running'&&Math.abs(Date.now()-schedPingAt)<4000;if(!pre)play('ping');
     if(navigator.vibrate)navigator.vibrate([200,100,200]);flash();
     const m=me.team==='hider'?'Ping. Seekers got a rough circle around you. Photo in 1 min.':'Ping. Hider circles updated. Photos incoming.';toast(m);notify('Manhunt ping',m,'ping')}
