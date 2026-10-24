@@ -142,6 +142,17 @@ body[data-theme] .leaflet-tile-pane{filter:var(--map);transition:filter .9s}
 .rec{display:flex;gap:8px;align-items:center;margin-top:10px;padding:8px 10px;border-radius:12px 3px 12px 3px;background:var(--sf2)}
 .rec .rn{flex:1;min-width:0;font-size:12px;color:var(--mute);word-break:break-all}
 a.btn{text-decoration:none;display:inline-block;text-align:center}.btn.recording{background:var(--hc);color:#1a0600}
+#gate{position:fixed;inset:0;z-index:6000;background:linear-gradient(112deg,#2a0f06 0 47%,#0d0f13 47% 53%,#06222d 53%);color:#f1f0ec;display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto}
+.gcard{width:100%;max-width:440px;background:#0d0f13ee;border-radius:26px 6px 26px 6px;padding:22px;box-shadow:0 20px 60px #000}
+.gcard h2{margin:0 0 6px;font:900 34px/1 var(--disp);font-variation-settings:'wdth' 115}
+.gcard .small{color:#9aa0ad}
+#gateList{list-style:none;margin:16px 0;padding:0}
+#gateList li{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #272b34}
+#gateList .gi{flex:1;min-width:0}#gateList .gn{font:800 17px var(--disp)}#gateList .gd{font-size:13px;color:#9aa0ad}
+.pill{font:800 12px var(--disp);padding:4px 10px;border-radius:10px 3px 10px 3px;background:#272b34;color:#c9c6bb}
+.pill.ok{background:#3ecf8e;color:#03150c}.pill.bad{background:#ff5b1f;color:#1a0600}
+#gateHelp{margin-bottom:14px;color:#ffcdb8}
+#gate .btn{background:#f1f0ec;color:#101216}
 @media (prefers-reduced-motion:reduce){*,*::before{animation:none!important;transition:none!important}#reveal.show{clip-path:none}}
 </style></head>
 <body data-theme="neutral">
@@ -232,6 +243,13 @@ a.btn{text-decoration:none;display:inline-block;text-align:center}.btn.recording
 <div id="photo" class="hidden"><div id="pcard"><div class="stamp">INTEL // HIDER SPOTTED</div>
   <div id="pHead"><div id="pAv"></div><div style="flex:1"><div id="pName"></div><div id="pMeta"></div></div></div>
   <img id="pImg" alt="Photo from hider"><button class="btn hot" id="pClose" style="margin-top:12px">Got it</button></div></div>
+<div id="gate" class="hidden"><div class="gcard">
+  <h2>Allow everything to play</h2>
+  <p class="small">Manhunt needs all four. You can’t host or join until every one is allowed.</p>
+  <ul id="gateList"></ul>
+  <div id="gateHelp" class="small"></div>
+  <button class="btn" id="gateBtn">Allow everything</button>
+</div></div>
 <div id="reveal" class="hidden"><div id="rvWord"></div><div id="rvSub"></div></div>
 <div id="toast" class="hidden"></div><div id="audios"></div><video id="snapV" playsinline muted autoplay></video>
 
@@ -338,7 +356,7 @@ function commonPeer(){
   peer.on('call',onCall);
   peer.on('connection',c=>{if(me.isHost)hostAccept(c);else c.on('open',()=>{c.send({t:'wait'});setTimeout(()=>c.close(),500)})});
 }
-async function startHost(code,restore){
+async function startHost(code,restore){if(!permsOk){afterGate=()=>startHost(code,restore);showGate();return}
   me.isHost=true;me.code=code;store.set('mh_sess',JSON.stringify({code,host:true,ts:Date.now()}));await getMic();
   peer=new Peer('manhunt-'+code);
   peer.on('error',e=>toast(e.type==='unavailable-id'?'Code clash or old host still connected. Try again.':'Connection error: '+e.type));
@@ -350,7 +368,7 @@ async function startHost(code,restore){
 }
 $('create').onclick=()=>{audio();askNotify();me.name=$('name').value.trim()||'Host';store.set('mh_name',me.name);
   const ch='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let c='';for(let i=0;i<4;i++)c+=ch[Math.floor(Math.random()*ch.length)];startHost(c)};
-async function doJoin(){audio();askNotify();me.name=$('name').value.trim()||'Player';store.set('mh_name',me.name);me.code=$('code').value.trim().toUpperCase();
+async function doJoin(){if(!permsOk){afterGate=doJoin;showGate();return}audio();askNotify();me.name=$('name').value.trim()||'Player';store.set('mh_name',me.name);me.code=$('code').value.trim().toUpperCase();
   if(me.code.length!==4){toast('Enter the 4-letter room code');return}
   await getMic();store.set('mh_sess',JSON.stringify({code:me.code,host:false,ts:Date.now()}));newGuestPeer(0)}
 $('joinbtn').onclick=doJoin;
@@ -786,6 +804,58 @@ $('recScreen').onclick=async()=>{
   screenStream.getVideoTracks()[0].addEventListener('ended',()=>{if(screenRec){try{screenRec.stop()}catch(e){}}});
   screenRec=startRec(screenStream,'screen',on=>{if(!on){screenRec=null;if(screenStream){screenStream.getTracks().forEach(t=>t.stop());screenStream=null}}updateCamUI()});updateCamUI();
 };
+
+/* ===== PERMISSION GATE: location, camera, microphone and notifications must all be allowed to host or join ===== */
+let permsOk=false,afterGate=null;
+const notesSupported='Notification' in window;   // browsers with no notification support at all (some iPhones) cannot be asked, so it is not required there
+const PERMS=[['loc','Location','Live map and hider pings'],['cam','Camera','Spy photos and camera sharing'],['mic','Microphone','Team radio'],['note','Notifications','Pings and alerts while the app is in the background']];
+const permState={loc:'wait',cam:'wait',mic:'wait',note:'wait'};
+function paintGate(){
+  const ul=$('gateList');ul.innerHTML='';
+  PERMS.forEach(([k,n,d])=>{const li=document.createElement('li'),i=document.createElement('div');i.className='gi';
+    const a=document.createElement('div');a.className='gn';a.textContent=n;const b=document.createElement('div');b.className='gd';b.textContent=d;i.append(a,b);
+    const st=permState[k],pl=document.createElement('span');pl.className='pill'+(st==='ok'?' ok':st==='denied'?' bad':'');pl.textContent=st==='ok'?'Allowed':st==='denied'?'Blocked':'Waiting';
+    li.append(i,pl);ul.appendChild(li)});
+  const anyDenied=PERMS.some(([k])=>permState[k]==='denied');
+  $('gateHelp').textContent=!secureOk?'This page must be opened over https. Host the file on Netlify, GitHub Pages or Cloudflare Pages.':anyDenied?'Something is blocked. Tap the lock or settings icon next to the address bar, set it to Allow, then come back. This screen rechecks automatically.':'';
+  $('gateBtn').textContent=anyDenied?'Try again':'Allow everything';
+}
+function showGate(){$('gate').classList.remove('hidden');paintGate()}
+function checkPass(){
+  if(PERMS.every(([k])=>permState[k]==='ok')){
+    permsOk=true;$('gate').classList.add('hidden');
+    if(afterGate){const f=afterGate;afterGate=null;f()}return true}
+  permsOk=false;paintGate();return false;
+}
+async function silentCheck(){
+  const q=async n=>{try{return(await navigator.permissions.query({name:n})).state}catch(e){return 'unknown'}};
+  const [loc,cam,mic]=await Promise.all([q('geolocation'),q('camera'),q('microphone')]);
+  const note=!notesSupported?'granted':Notification.permission==='granted'?'granted':Notification.permission==='denied'?'denied':'prompt';
+  return{loc,cam,mic,note};
+}
+function applySilent(m){
+  Object.keys(m).forEach(k=>{if(m[k]==='granted')permState[k]='ok';else if(m[k]==='denied')permState[k]='denied';else if(m[k]==='prompt'&&permState[k]!=='wait')permState[k]='wait'})}
+const tryMedia=c=>navigator.mediaDevices&&navigator.mediaDevices.getUserMedia?navigator.mediaDevices.getUserMedia(c).then(st=>{st.getTracks().forEach(t=>t.stop());return 'ok'}).catch(()=>'denied'):Promise.resolve('denied');
+async function askAll(){
+  if(!secureOk){PERMS.forEach(([k])=>permState[k]='denied');paintGate();return}
+  if(notesSupported&&Notification.permission==='default'){try{await Notification.requestPermission()}catch(e){}}   // first, while the tap still counts
+  permState.note=!notesSupported||Notification.permission==='granted'?'ok':'denied';
+  permState.loc=await new Promise(r=>{if(!navigator.geolocation)return r('denied');navigator.geolocation.getCurrentPosition(()=>r('ok'),e=>r(e.code===1?'denied':'ok'),{enableHighAccuracy:true,timeout:15000,maximumAge:60000})});
+  permState.cam=await tryMedia({video:true});
+  permState.mic=await tryMedia({audio:true});
+  paintGate();checkPass();
+}
+$('gateBtn').onclick=()=>{audio();askAll()};
+async function recheck(){applySilent(await silentCheck());checkPass()}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!$('gate').classList.contains('hidden'))recheck()});
+window.addEventListener('focus',()=>{if(!$('gate').classList.contains('hidden'))recheck()});
+// if a permission is switched off while playing, the gate comes back over the game until it is allowed again
+setInterval(async()=>{
+  const m=await silentCheck();let bad=false;
+  Object.keys(m).forEach(k=>{if(m[k]==='denied'||m[k]==='prompt'){permState[k]=m[k]==='denied'?'denied':'wait';bad=true}else if(m[k]==='granted')permState[k]='ok'});
+  if(bad&&entered){permsOk=false;showGate()}else if(!bad&&!permsOk&&!$('gate').classList.contains('hidden'))checkPass();
+},4000);
+(async()=>{applySilent(await silentCheck());if(!checkPass())showGate()})();
 
 /* ===== auto-resume after reload or discarded tab (host restores the saved game) ===== */
 (function(){try{const s=JSON.parse(store.get('mh_sess')||'null'),want=params.get('room')?params.get('room').toUpperCase():null;
