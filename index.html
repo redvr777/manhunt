@@ -1334,11 +1334,15 @@ $('gateBtn').onclick=()=>{audio();askOrient();askAll()};
 async function recheck(){applySilent(await silentCheck());checkPass()}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!$('gate').classList.contains('hidden'))recheck()});
 window.addEventListener('focus',()=>{if(!$('gate').classList.contains('hidden'))recheck()});
-// if a permission is switched off while playing, the gate comes back over the game until it is allowed again
+// Recheck permission state quietly. The setup gate is shown on initial entry only,
+// unless the player explicitly tries to host or join while permissions are missing.
 setInterval(async()=>{
-  const m=await silentCheck();let bad=false;
-  Object.keys(m).forEach(k=>{if(m[k]==='denied'){permState[k]='denied';bad=true}else if(m[k]==='granted')permState[k]='ok'});
-  if(bad&&entered){permsOk=false;showGate()}else if(!bad&&!permsOk&&!$('gate').classList.contains('hidden'))checkPass();
+  const m=await silentCheck();
+  Object.keys(m).forEach(k=>{
+    if(m[k]==='denied')permState[k]='denied';
+    else if(m[k]==='granted')permState[k]='ok';
+  });
+  if(!$('gate').classList.contains('hidden'))checkPass();
 },4000);
 (async()=>{applySilent(await silentCheck());if(!checkPass())showGate()})();
 
