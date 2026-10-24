@@ -274,6 +274,74 @@ input[type=text],input[type=number]{font-size:22px;min-height:48px}
 @media (max-width:400px){.tool{width:44px;height:44px}#sheetBtn{width:76px}#roomcode{font-size:16px}.well{padding:16px}}
 @media (max-height:700px){#count{font-size:clamp(56px,18vw,90px)}#ptt,#sheetBtn{height:72px}#sheetBtn{width:72px}}
 @media (hover:none){.btn,.tool,.tab{-webkit-tap-highlight-color:transparent}}
+/* ===== MOTION ===== */
+@keyframes rise{from{opacity:0;transform:translateY(16px)}}
+@keyframes slideUp{from{transform:translateY(100%)}}
+@keyframes slideR{from{opacity:0;transform:translateX(36px) scale(.8)}}
+@keyframes dropIn{from{opacity:0;transform:translateY(-22px)}}
+@keyframes fromL{from{opacity:0;transform:translateX(-46px)}}
+@keyframes fromR{from{opacity:0;transform:translateX(46px)}}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,18px) scale(.88)}}
+@keyframes pop2{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.18)}100%{transform:scale(1)}}
+@keyframes msgIn{from{opacity:0;transform:translateY(10px) scale(.96)}}
+@keyframes ring{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.18,1.45);opacity:0}}
+@keyframes shine{0%,55%{transform:translateX(0) skewX(-20deg)}100%{transform:translateX(480%) skewX(-20deg)}}
+@keyframes ripple{from{transform:scale(0);opacity:.6}to{transform:scale(1);opacity:0}}
+@keyframes tk{0%{transform:scale(1.07)}100%{transform:scale(1)}}
+@keyframes shutter{0%{opacity:.95}100%{opacity:0}}
+@keyframes develop{0%{filter:brightness(3.2) contrast(.3) blur(7px) grayscale(1)}60%{filter:brightness(1.3) blur(2px) grayscale(.6)}100%{filter:none}}
+@keyframes slam{0%{transform:scale(2.4);opacity:0}70%{transform:scale(.94)}100%{transform:scale(1);opacity:1}}
+@keyframes glowg{0%,100%{box-shadow:0 0 0 #3ecf8e00}50%{box-shadow:0 0 16px #3ecf8eaa}}
+@keyframes dots{50%{opacity:.35}}
+/* join page: one orchestrated entrance */
+.jin>*{animation:rise .65s cubic-bezier(.2,.9,.2,1) backwards}
+.jin>:nth-child(1){animation:none}
+.jin>:nth-child(2){animation-delay:.25s}.jin>:nth-child(3){animation-delay:.3s}.jin>:nth-child(4){animation-delay:.36s}
+.jin>:nth-child(5){animation-delay:.44s}.jin>:nth-child(6){animation-delay:.52s}.jin>:nth-child(7){animation-delay:.6s}
+.jin>:nth-child(8){animation-delay:.68s}.jin>:nth-child(9){animation-delay:.74s}.jin>:nth-child(10){animation-delay:.8s}
+.logo .e{animation:fromL .9s cubic-bezier(.2,.9,.2,1) backwards}
+.logo .i{animation:fromR .9s cubic-bezier(.2,.9,.2,1) backwards,gl 6s steps(1) 1.2s infinite}
+#srvList .msg0{animation:dots 1.2s ease-in-out infinite}
+#adminTag{animation:glowg 2.4s ease-in-out infinite}
+/* buttons: shine, ripple, springy press */
+.btn,.tab,.seg button,#sheetBtn{position:relative;overflow:hidden}
+#create::after,#start::after,#joinbtn::after{content:'';position:absolute;top:0;bottom:0;left:-60%;width:40%;background:linear-gradient(100deg,#0000,#ffffff80,#0000);pointer-events:none;animation:shine 4.5s ease-in-out infinite}
+#joinbtn::after{animation-delay:1.5s}
+.rip{position:absolute;border-radius:50%;background:#ffffff66;pointer-events:none;transform:scale(0);animation:ripple .6s ease-out forwards}
+.btn,.tab,.tool,.seg button,#sheetBtn,#ptt{transition:transform .12s cubic-bezier(.3,1.6,.5,1),box-shadow .12s,background-color .2s,color .2s}
+.badge:not(.hidden){animation:pop2 .45s cubic-bezier(.2,1.4,.4,1)}
+.pill.ok{animation:pop2 .45s cubic-bezier(.2,1.4,.4,1)}
+/* game entrance */
+#app:not(.hidden) #hud>div:first-child{animation:dropIn .7s cubic-bezier(.2,.9,.2,1) backwards}
+#app:not(.hidden) .tool{animation:slideR .55s cubic-bezier(.2,1.2,.4,1) backwards}
+#app:not(.hidden) .tool:nth-child(1){animation-delay:.15s}#app:not(.hidden) .tool:nth-child(2){animation-delay:.22s}
+#app:not(.hidden) .tool:nth-child(3){animation-delay:.29s}#app:not(.hidden) .tool:nth-child(4){animation-delay:.36s}
+#app:not(.hidden) .tool:nth-child(5){animation-delay:.43s}
+#app:not(.hidden) #dock{animation:slideUp .6s .2s cubic-bezier(.2,.9,.2,1) backwards}
+#count.tk:not(.urgent){animation:tk .35s ease-out}
+/* push to talk: sonar ring while idle */
+#ptt{position:relative}
+#ptt:not(.live)::after{content:'';position:absolute;inset:0;border-radius:inherit;border:2px solid var(--ac);pointer-events:none;animation:ring 2.8s ease-out infinite}
+/* sheet content cascades in each time it opens */
+#sheet.open>*{animation:rise .45s cubic-bezier(.2,.9,.2,1) backwards}
+#sheet.open>:nth-child(2){animation-delay:.05s}#sheet.open>:nth-child(3){animation-delay:.09s}#sheet.open>:nth-child(4){animation-delay:.13s}
+#sheet.open>:nth-child(5){animation-delay:.17s}#sheet.open>:nth-child(6){animation-delay:.21s}#sheet.open>:nth-child(7){animation-delay:.25s}
+#sheet.open>:nth-child(8){animation-delay:.29s}#sheet.open>:nth-child(9){animation-delay:.33s}#sheet.open>:nth-child(10){animation-delay:.37s}
+#sheet.open>:nth-child(n+11){animation-delay:.41s}
+/* panels, toast, messages, cameras */
+#chat:not(.hidden),#cam:not(.hidden){animation:slideUp .45s cubic-bezier(.2,.9,.2,1)}
+#toast:not(.hidden){animation:toastIn .35s cubic-bezier(.2,1.3,.4,1)}
+.msg:last-child{animation:msgIn .35s cubic-bezier(.2,1.3,.4,1)}
+.camtile,.rec{animation:rise .4s cubic-bezier(.2,.9,.2,1) backwards}
+#gate:not(.hidden) .gcard{animation:pop .45s cubic-bezier(.2,1.3,.4,1)}
+#closed:not(.hidden) h2{animation:slam .65s cubic-bezier(.2,1.2,.4,1)}
+#closed:not(.hidden)>*:not(h2){animation:rise .6s .45s backwards}
+/* spy photo: shutter flash, then the polaroid develops */
+#photo::after{content:'';position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+#photo:not(.hidden)::after{animation:shutter .55s ease-out}
+#photo:not(.hidden) #pImg{animation:develop 2.2s ease-out .35s backwards}
+#photo:not(.hidden) .stamp{animation:slam .5s cubic-bezier(.2,1.2,.4,1) .15s backwards}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.rip{display:none}}
 </style></head>
 <body data-theme="neutral">
 
@@ -629,7 +697,7 @@ $('again').onclick=()=>{state.status='lobby';state.locs={};liveStore={};state.pi
 /* ===== client ===== */
 function send(d){if(me.isHost)hostHandle(me.id,d);else if(hostConn&&hostConn.open)hostConn.send(d)}
 function applyState(s){
-  state=s;skew=s.now-Date.now();const mine=s.players[me.id];if(mine)me.team=mine.team;
+  const pt=me.team;state=s;skew=s.now-Date.now();const mine=s.players[me.id];if(mine)me.team=mine.team;const teamChanged=!first&&pt!==me.team&&s.status==='running'&&prevStatus==='running';
   if(!entered){entered=true;$('join').classList.add('hidden');$('app').classList.remove('hidden');$('roomcode').textContent=me.code;initMap()}
   const pinged=!first&&lastPingN!==null&&s.pingN>lastPingN;lastPingN=s.pingN;first=false;
   if(s.status==='running'){keepAwake();const own=live[me.id];live=Object.assign({},s.live||{});if(own&&(!live[me.id]||own.ts>live[me.id].ts))live[me.id]=own;startWatch();if(me.team==='hider')snapCam();else stopSnapCam()}
@@ -638,7 +706,7 @@ function applyState(s){
     if(s.status==='running'&&!resumed){showReveal();photos=me.isHost?photos:[];renderGal()}
     if(s.status==='lobby'){photos=me.isHost?[]:[];renderGal()}
     if(s.status==='over'){play('over');notify('Manhunt','The game is over.','over')}}
-  prevStatus=s.status;render();syncCalls();scheduleCountdown();syncCam();seekerPulse(s);
+  prevStatus=s.status;if(teamChanged)showReveal();render();syncCalls();scheduleCountdown();syncCam();seekerPulse(s);
   if(pinged){const pre=A&&A.state==='running'&&Math.abs(Date.now()-schedPingAt)<4000;if(!pre)play('ping');
     if(navigator.vibrate)navigator.vibrate([200,100,200]);flash();
     const m=me.team==='hider'?'Ping. Seekers got a rough circle around you. Photo in 1 min.':'Ping. Hider circles updated. Photos incoming.';toast(m);notify('Manhunt ping',m,'ping')}
@@ -710,6 +778,9 @@ function setSheet(o){sheetOpen=o;$('sheet').classList.toggle('open',o)}$('sheetB
   g.addEventListener('pointermove',e=>{if(y0===null)return;sh.style.transform='translateY('+Math.max(0,e.clientY-y0)+'px)'});
   const end=e=>{if(y0===null)return;const d=e.clientY-y0;y0=null;sh.style.transition='';sh.style.transform='';if(d>70)setSheet(false)};
   g.addEventListener('pointerup',end);g.addEventListener('pointercancel',end)})();
+document.addEventListener('pointerdown',e=>{const b=e.target.closest&&e.target.closest('.btn,.tab,.seg button,#sheetBtn');if(!b)return;
+  const r=b.getBoundingClientRect(),d=Math.max(r.width,r.height)*1.7,x=document.createElement('span');x.className='rip';
+  x.style.cssText='width:'+d+'px;height:'+d+'px;left:'+(e.clientX-r.left-d/2)+'px;top:'+(e.clientY-r.top-d/2)+'px';b.appendChild(x);setTimeout(()=>x.remove(),650)},{passive:true});
 document.addEventListener('pointerdown',e=>{if(navigator.vibrate&&e.target.closest&&e.target.closest('.btn,.tool,.tab,.seg button,#sheetBtn'))navigator.vibrate(8)},{passive:true});
 function render(){
   const s=state,lobby=s.status==='lobby';document.body.dataset.theme=lobby?'neutral':me.team;
@@ -730,7 +801,7 @@ function render(){
 }
 function tick(){
   if(!state||!entered)return;const s=state,now=Date.now()+skew,c=$('count');let urg=false;
-  if(s.status==='running'){const rem=s.nextPing-now;$('countlbl').textContent=s.pingN===0?(me.team==='hider'?'Time left to hide':'Hiders are hiding. First ping in'):'Next ping in';c.textContent=fmt(rem);urg=rem<=10000;
+  if(s.status==='running'){const rem=s.nextPing-now;$('countlbl').textContent=s.pingN===0?(me.team==='hider'?'Time left to hide':'Hiders are hiding. First ping in'):'Next ping in';const nt=fmt(rem);if(c.textContent!==nt){c.textContent=nt;c.classList.remove('tk');void c.offsetWidth;c.classList.add('tk')}urg=rem<=10000;
     const sn=$('snapNote');if(s.photoAt&&s.pingN>0){const r=s.photoAt-now;sn.textContent=(me.team==='hider'?'Your photo goes out in ':'Hider photos in ')+fmt(r);sn.classList.toggle('hidden',r<=0)}else sn.classList.add('hidden')}
   else{$('snapNote').classList.add('hidden');$('countlbl').textContent=s.status==='over'?'Game over':'Waiting to start';c.textContent='--:--'}
   c.classList.toggle('urgent',urg);
