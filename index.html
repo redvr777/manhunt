@@ -59,6 +59,25 @@ input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;b
 .ccol .nm{max-width:58px}
 .rad{font-size:11px;font-weight:700;color:#fff;background:#ff5a4fdd;padding:1px 8px;border-radius:6px;margin-top:3px;white-space:nowrap}
 .rad.dim{background:#000a;border:1px dashed #ff5a4f}
+#chatBtn{position:relative}
+.badge{background:var(--hider);color:#fff;border-radius:99px;font-size:11px;padding:0 6px;margin-left:5px;font-weight:800}
+#chat{position:fixed;left:0;right:0;bottom:0;height:62dvh;background:var(--panel);border-top:2px solid var(--line);z-index:900;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -10px 30px #0009}
+#chatHead{display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--line);align-items:center}
+.tab{flex:1;padding:9px;border-radius:9px;border:1px solid var(--line);background:#0f141b;font-weight:700;cursor:pointer;position:relative}
+.tab.h.on{background:var(--hider);color:#1c0503;border-color:var(--hider)}
+.tab.s.on{background:var(--seeker);color:#04101c;border-color:var(--seeker)}
+.tab.all.on{background:var(--ok);color:#03150d;border-color:var(--ok)}
+.dotu{position:absolute;top:5px;right:7px;width:9px;height:9px;border-radius:50%;background:#fff;border:1px solid #000}
+#chatList{flex:1;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.msg{display:flex;gap:8px;align-items:flex-start}
+.msg.mine{flex-direction:row-reverse}
+.msg .b{background:#0f141b;border:1px solid var(--line);border-radius:10px;padding:5px 10px;max-width:78%;word-break:break-word}
+.msg.mine .b{background:#232c38}
+.msg .who{font-size:11px;font-weight:700;margin-bottom:1px}
+.msg .who.h{color:var(--hider)}.msg .who.s{color:var(--seeker)}
+.empty{color:var(--mute);text-align:center;margin-top:30px;font-size:14px}
+#chatForm{display:flex;gap:8px;padding:8px;border-top:1px solid var(--line)}
+#chatForm input{flex:1}
 </style>
 </head>
 <body>
@@ -86,13 +105,14 @@ input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;b
     <input type="text" id="code" maxlength="4" placeholder="ABCD" autocomplete="off" style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-size:20px">
     <button class="btn alt" id="joinbtn">Join game</button>
   </div>
-  <p class="small">While a game is running, your live location is shared with your own team only (you can switch it off). The other team never sees exact spots: seekers only get a rough 0.5-mile area for each hider at every ping. The mic is only live while you hold the talk button. Needs HTTPS.</p>
+  <p class="small">While a game is running, your live location is shared with your own team only (you can switch it off). The other team never sees exact spots: seekers only get a rough 0.2-mile area for each hider at every ping. The mic is only live while you hold the talk button. Needs HTTPS.</p>
 </div>
 
 <div id="app" class="hidden">
   <div id="top">
     <div><b id="roomcode"></b> <span class="chip" id="status"></span></div>
     <div class="row" style="flex:0 0 auto">
+      <button class="btn alt sm" id="chatBtn">💬<span id="chatBadge" class="badge hidden">0</span></button>
       <button class="btn alt sm" id="share">Share</button>
       <button class="btn alt sm" id="fit">Fit</button>
       <button class="btn alt sm" id="locme">Me</button>
@@ -134,6 +154,15 @@ input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;b
     <ul id="players"></ul>
   </div>
 </div>
+<div id="chat" class="hidden">
+  <div id="chatHead">
+    <button class="tab" id="tabTeam"><span id="tabTeamTxt">Team</span><i id="dotTeam" class="dotu hidden"></i></button>
+    <button class="tab all" id="tabAll"><span>Everyone</span><i id="dotAll" class="dotu hidden"></i></button>
+    <button class="btn alt sm" id="chatClose">✕</button>
+  </div>
+  <div id="chatList"></div>
+  <form id="chatForm"><input type="text" id="chatIn" maxlength="200" placeholder="Message…" autocomplete="off"><button class="btn sm" type="submit">Send</button></form>
+</div>
 <div id="toast" class="hidden"></div>
 <div id="audios"></div>
 
@@ -142,9 +171,10 @@ input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;b
 <script>
 // Reserved for a future Unity/PUN2 build. Browsers can't use Photon Voice, so this site uses WebRTC (PeerJS).
 const CFG = { photonPunAppId:'e311f009-c6be-433f-bda5-ee47fe131d88', photonVoiceAppId:'03e1ff28-3112-4a10-a254-8230478e742e' };
-const RADIUS_M = 804.67;      // 0.5 mile — the area seekers see for each hider
-const FUZZ_M = 402;           // true spot is somewhere inside the circle, not at its center
-const CLUSTER_M = 450;        // hider circles closer than this are shown as one shared circle
+const RADIUS_M = 321.87;      // 0.2 mile — the area seekers see for each hider
+const FUZZ_M = 160;           // true spot is somewhere inside the circle, not at its center
+const CLUSTER_M = 180;        // hider circles closer than this are shown as one shared circle
+const STILL_M = 100;          // moved less than this since last ping = same circle
 
 const $ = id => document.getElementById(id);
 const me = { id:null, name:'', team:'hider', isHost:false, code:'', pic:null };
@@ -259,6 +289,9 @@ function connectToHost(hostId, cb){
     else if(d.t==='ping') doPing();
     else if(d.t==='live'){ live[d.id]=d.l; drawLive(); }
     else if(d.t==='liveoff'){ delete live[d.id]; drawLive(); }
+    else if(d.t==='chat') addChat(d.m);
+    else if(d.t==='chathist') (d.list||[]).forEach(m => addChat(m, true));
+    else if(d.t==='chatreset') resetTeamChat();
     else if(d.t==='redirect'){ done=true; clearTimeout(to); c.close(); connectToHost(d.id, cb); }
     else if(d.t==='wait') fail();
   });
@@ -290,6 +323,7 @@ function promote(old){
   state.nextPing -= skew; state.startAt -= skew;           // convert old host's clock to mine
   state.hostId = me.id; state.epoch = (state.epoch||0)+1;
   liveStore = Object.assign({}, live);                      // seed with what I could see
+  chatLog = chatMsgs.slice();
   if(state.players[old]) removeOrOff(old);
   Object.keys(conns).forEach(k => delete conns[k]);
   if(!tickHost) tickHost = setInterval(hostTick, 1000);
@@ -329,10 +363,12 @@ function fuzz(lat,lng){
 }
 function hostHandle(pid, d){
   if(d.t==='live' || d.t==='liveoff'){ onLive(pid, d); return; }
+  if(d.t==='chat'){ hostChat(pid, d); return; }
   if(d.t==='hello'){
     const ex = state.players[pid];
     state.players[pid] = { name:String(d.name||'Player').slice(0,16), team: ex?ex.team:'hider', pic: validPic(d.pic)?d.pic:null };
     if(!state.order.includes(pid)) state.order.push(pid);
+    sendHistory(pid);
   }
   else if(d.t==='pic'){ if(state.players[pid] && validPic(d.pic)) state.players[pid].pic = d.pic; }
   else if(d.t==='loc'){            // only hiders ping; this is the exact fix, which never leaves the host/hiders
@@ -342,7 +378,7 @@ function hostHandle(pid, d){
     else {
       const prev = [...arr].reverse().find(a => !a.err && a.lat!==undefined);
       let clat, clng;
-      if(prev && L.latLng(prev.lat,prev.lng).distanceTo(L.latLng(d.lat,d.lng)) < 150){ clat=prev.clat; clng=prev.clng; }   // standing still: keep the same circle so repeat pings can't be averaged out
+      if(prev && L.latLng(prev.lat,prev.lng).distanceTo(L.latLng(d.lat,d.lng)) < STILL_M){ clat=prev.clat; clng=prev.clng; }   // standing still: keep the same circle so repeat pings can't be averaged out
       else [clat,clng] = fuzz(d.lat,d.lng);
       arr.push({n:state.pingN, lat:d.lat, lng:d.lng, acc:d.acc, clat, clng, ts:Date.now()});
     }
@@ -361,7 +397,7 @@ function onLive(pid, d){
 }
 // what each team may see:
 //   hiders  -> exact pings + live positions of hiders
-//   seekers -> only a rough 0.5-mile circle per hider ping (no exact coordinates) + live positions of seekers
+//   seekers -> only a rough 0.2-mile circle per hider ping (no exact coordinates) + live positions of seekers
 function viewFor(team){
   const locs = {};
   Object.entries(state.locs).forEach(([id,arr]) => {
@@ -390,6 +426,7 @@ function hostTick(){
 }
 $('pingNow').onclick = () => { if(me.isHost && state.status==='running') firePing(); };
 $('start').onclick = () => {
+  resetChatHost();
   state.hideMin = Math.max(0, +$('hideMin').value||0); state.pingMin = Math.max(1, +$('pingMin').value||5);
   state.locs = {}; liveStore = {}; live = {}; state.pingN = 0; state.startAt = Date.now();
   state.nextPing = Date.now() + (state.hideMin===0 ? 1000 : state.hideMin*60000);
@@ -403,7 +440,7 @@ $('rand').onclick = () => {
   broadcast(); toast('Teams randomized');
 };
 $('end').onclick = () => { state.status='over'; liveStore={}; broadcast(); };
-$('again').onclick = () => { state.status='lobby'; state.locs={}; liveStore={}; state.pingN=0; Object.keys(state.players).forEach(id=>{ if(state.players[id].off) removeOrOff(id); }); broadcast(); };
+$('again').onclick = () => { resetChatHost(); state.status='lobby'; state.locs={}; liveStore={}; state.pingN=0; Object.keys(state.players).forEach(id=>{ if(state.players[id].off) removeOrOff(id); }); broadcast(); };
 
 // ---------- client state ----------
 function send(d){ if(me.isHost) hostHandle(me.id, d); else if(hostConn && hostConn.open) hostConn.send(d); }
@@ -442,7 +479,7 @@ $('liveToggle').onchange = () => {
   if($('liveToggle').checked){ if(state && state.status==='running') startWatch(); }
   else { stopWatch(); delete live[me.id]; send({t:'liveoff'}); drawLive(); }
 };
-// Ping: hiders only. Seekers see a rough 0.5-mile circle, built by the host.
+// Ping: hiders only. Seekers see a rough 0.2-mile circle, built by the host.
 function doPing(){
   if(!state || state.status!=='running' || me.team!=='hider') return;
   toast('Ping! Sharing a rough area of your location…');
@@ -472,8 +509,8 @@ function render(){
   $('teambar').className = me.team==='hider'?'h':'s';
   $('teamTxt').textContent = 'YOU ARE A '+me.team.toUpperCase()+(me.isHost?' · HOST':'');
   $('rule').textContent = me.team==='hider'
-    ? `Your team sees you live. Seekers only see a rough 0.5-mile circle around each hider every ${s.pingMin} min.`
-    : `You see your fellow seekers live. Hiders show up as a 0.5-mile circle every ${s.pingMin} min.`;
+    ? `Your team sees you live. Seekers only see a rough 0.2-mile circle around each hider every ${s.pingMin} min.`
+    : `You see your fellow seekers live. Hiders show up as a 0.2-mile circle every ${s.pingMin} min.`;
   const mine = s.players[me.id]||{name:me.name,pic:me.pic}; const a = avatar(mine,34,me.team); $('meAv').replaceChildren(...a.childNodes); $('meAv').className=a.className;
 
   const ul = $('players'); ul.innerHTML='';
@@ -525,14 +562,14 @@ function clusterIcon(cl){
     col.append(nm, avatar(it.p,42,'hider')); row.appendChild(col);
   });
   const newest = Math.max(...cl.items.map(i=>i.last.ts)), n = Math.max(...cl.items.map(i=>i.last.n));
-  const lb=document.createElement('div'); lb.className='rad'; lb.textContent='.5 mile radius · ping #'+n+' · '+ago(newest);
+  const lb=document.createElement('div'); lb.className='rad'; lb.textContent='.2 mile radius · ping #'+n+' · '+ago(newest);
   w.append(row, lb);
   const width = Math.max(150, Math.min(cl.items.length,6)*64);
   return L.divIcon({html:w, className:'', iconSize:[width,96], iconAnchor:[width/2,48]});
 }
 function drawMap(){ if(!map) return; drawPings(); drawLive(); if(!fitted && fitMap()) fitted = true; }
 
-// hider pings: a 0.5-mile circle (never an exact dot) with the hider's picture and name inside
+// hider pings: a 0.2-mile circle (never an exact dot) with the hider's picture and name inside
 function drawPings(){
   layerPings.clearLayers();
   const items = [];
@@ -550,7 +587,7 @@ function drawPings(){
     items.forEach(it => {
       const c=[it.last.clat,it.last.clng];
       L.circle(c,{radius:RADIUS_M,color:'#ff5a4f',weight:1,dashArray:'6 8',fillOpacity:.04,interactive:false}).addTo(layerPings);
-      const lb=document.createElement('div'); lb.className='rad dim'; lb.textContent='Seekers see: '+it.p.name+' · .5 mile radius';
+      const lb=document.createElement('div'); lb.className='rad dim'; lb.textContent='Seekers see: '+it.p.name+' · .2 mile radius';
       L.marker(c,{icon:L.divIcon({html:lb,className:'',iconSize:[200,20],iconAnchor:[100,10]}),interactive:false}).addTo(layerPings);
     });
     return;
@@ -605,6 +642,79 @@ $('testLoc').onclick = () => {
 $('share').onclick = async () => {
   const url = location.origin+location.pathname+'?room='+me.code;
   try{ if(navigator.share) await navigator.share({title:'Manhunt',text:'Join my manhunt game',url}); else { await navigator.clipboard.writeText(url); toast('Invite link copied'); } }catch(e){}
+};
+
+// ---------- chat ----------
+// "team" messages go only to the sender's team; "all" messages go to everyone. The host relays and filters.
+let chatLog = [], chatMsgs = [], chatOpen = false, chatTab = 'team';
+const chatSeen = new Set(), unread = {team:0, all:0}, lastChat = {};
+function hostChat(pid, d){
+  const p = state.players[pid]; if(!p) return;
+  const text = String(d.text||'').trim().slice(0,200); if(!text) return;
+  const now = Date.now(); if(now-(lastChat[pid]||0) < 600) return; lastChat[pid] = now;
+  const scope = d.scope==='team' ? 'team' : 'all';
+  const m = {id: now+'-'+Math.random().toString(36).slice(2,8), from:pid, name:p.name, team:p.team, scope, text, ts:now};
+  chatLog.push(m); if(chatLog.length>150) chatLog.shift();
+  Object.entries(conns).forEach(([cid,c]) => { if(scope==='all' || state.players[cid]?.team===p.team){ try{ c.send({t:'chat', m}); }catch(e){} } });
+  if(scope==='all' || me.team===p.team) addChat(m);
+}
+function sendHistory(pid){
+  const c = conns[pid], p = state.players[pid]; if(!c || !p) return;
+  try{ c.send({t:'chathist', list: chatLog.filter(m => m.scope==='all' || m.team===p.team)}); }catch(e){}
+}
+function resetChatHost(){
+  chatLog = chatLog.filter(m => m.scope==='all');
+  Object.values(conns).forEach(c => { try{ c.send({t:'chatreset'}); }catch(e){} });
+  resetTeamChat();
+}
+function resetTeamChat(){ chatMsgs = chatMsgs.filter(m => m.scope==='all'); unread.team = 0; updateBadge(); if(chatOpen) renderChat(); }
+function addChat(m, quiet){
+  if(!m || chatSeen.has(m.id)) return;
+  if(m.scope==='team' && m.team!==me.team) return;
+  chatSeen.add(m.id); chatMsgs.push(m); if(chatMsgs.length>200) chatMsgs.shift();
+  const tab = m.scope==='team' ? 'team' : 'all';
+  if(!quiet && m.from!==me.id && !(chatOpen && chatTab===tab)){ unread[tab]++; toast('💬 '+m.name+': '+m.text.slice(0,60), 2500); }
+  updateBadge(); if(chatOpen) renderChat();
+}
+function updateBadge(){
+  const n = unread.team + unread.all, b = $('chatBadge');
+  b.textContent = n; b.classList.toggle('hidden', !n);
+  $('dotTeam').classList.toggle('hidden', !unread.team); $('dotAll').classList.toggle('hidden', !unread.all);
+}
+function renderChat(){
+  if(!state) return;
+  unread[chatTab] = 0; updateBadge();
+  $('tabTeamTxt').textContent = me.team==='hider' ? 'Hiders only' : 'Seekers only';
+  $('tabTeam').className = 'tab '+(me.team==='hider'?'h':'s')+(chatTab==='team'?' on':'');
+  $('tabAll').className = 'tab all'+(chatTab==='all'?' on':'');
+  $('chatIn').placeholder = chatTab==='team' ? 'Message your '+me.team+'s only…' : 'Message everyone…';
+  const list = $('chatList'); list.innerHTML = '';
+  const shown = chatMsgs.filter(m => chatTab==='all' ? m.scope==='all' : (m.scope==='team' && m.team===me.team));
+  if(!shown.length){ const e=document.createElement('div'); e.className='empty'; e.textContent = chatTab==='team' ? 'Only your team can see this chat.' : 'Everyone in the game can see this chat.'; list.appendChild(e); }
+  shown.forEach(m => {
+    const row = document.createElement('div'); row.className = 'msg'+(m.from===me.id?' mine':'');
+    row.appendChild(avatar(state.players[m.from] || {name:m.name}, 28, m.team));
+    const b = document.createElement('div'); b.className = 'b';
+    const w = document.createElement('div'); w.className = 'who '+(m.team==='hider'?'h':'s'); w.textContent = m.name;
+    const t = document.createElement('div'); t.textContent = m.text;
+    b.append(w, t); row.appendChild(b); list.appendChild(row);
+  });
+  list.scrollTop = list.scrollHeight;
+}
+function openChat(){
+  chatOpen = true; $('chat').classList.remove('hidden');
+  if(!unread.team && unread.all) chatTab = 'all';
+  renderChat();
+}
+$('chatBtn').onclick = () => chatOpen ? ($('chat').classList.add('hidden'), chatOpen=false) : openChat();
+$('chatClose').onclick = () => { chatOpen = false; $('chat').classList.add('hidden'); };
+$('tabTeam').onclick = () => { chatTab = 'team'; renderChat(); };
+$('tabAll').onclick = () => { chatTab = 'all'; renderChat(); };
+$('chatForm').onsubmit = e => {
+  e.preventDefault();
+  const text = $('chatIn').value.trim(); if(!text) return;
+  send({t:'chat', scope: chatTab==='team' ? 'team' : 'all', text});
+  $('chatIn').value = '';
 };
 
 // ---------- team voice (walkie-talkie) ----------
