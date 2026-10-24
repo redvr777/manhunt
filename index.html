@@ -168,6 +168,28 @@ body[data-theme] .leaflet-tile-pane{filter:var(--map);transition:filter .9s}
 #rvSub{position:relative;margin-top:22px;font-size:19px;font-weight:700;max-width:26ch;animation:rise .6s ease .9s both}
 @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 
+/* cameras + recording */
+#cam{position:fixed;left:0;right:0;bottom:0;height:80dvh;background:var(--sf);border-radius:26px 6px 0 0;z-index:3600;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -14px 40px #000b}
+#camHead{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 8px;font:900 18px var(--disp)}
+#camBody{flex:1;overflow:auto;padding:4px 16px 18px}
+.camsec{background:var(--sf2);border-radius:18px 4px 18px 4px;padding:14px}
+.seg{display:flex;gap:6px;margin:8px 0 4px}
+.seg button{flex:1;padding:9px 4px;border:0;border-radius:12px 3px 12px 3px;background:var(--sf);color:var(--mute);font:800 13px var(--disp);cursor:pointer}
+.seg button.on{background:var(--ac);color:var(--on)}
+.row2{display:flex;gap:8px}.row2 .btn{margin:0}
+#camSelf,.camtile video{display:block;width:100%;max-height:42dvh;margin-top:10px;border-radius:14px 4px 14px 4px;background:#000;object-fit:cover}
+#camSelf.mirror{transform:scaleX(-1)}
+.camtile{margin-top:14px;padding:10px;border-radius:18px 4px 18px 4px;background:var(--sf2)}
+.camtile .ct{display:flex;align-items:center;gap:8px;font-weight:800}
+.camtile .ct .dot{width:10px;height:10px;border-radius:50%;background:var(--hc);animation:onair 1.4s ease-out infinite}
+.camtile .ct .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.camtile .cr{display:flex;gap:8px;margin-top:8px}
+.camtile .cr .btn{margin:0;flex:1}
+.rec{display:flex;gap:8px;align-items:center;margin-top:10px;padding:8px 10px;border-radius:12px 3px 12px 3px;background:var(--sf2)}
+.rec .rn{flex:1;min-width:0;font-size:12px;color:var(--mute);word-break:break-all}
+a.btn{text-decoration:none;display:inline-block;text-align:center}
+.btn.recording{background:var(--hc);color:#1a0600}
+
 @media (prefers-reduced-motion:reduce){
   *,*::before{animation:none!important;transition:none!important}
   #reveal.show{clip-path:none}
@@ -217,6 +239,7 @@ body[data-theme] .leaflet-tile-pane{filter:var(--map);transition:filter .9s}
     </div>
     <div id="tools">
       <button class="tool" id="chatBtn" aria-label="Chat"><svg class="ic" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span id="chatBadge" class="badge hidden">0</span></button>
+      <button class="tool" id="camBtn" aria-label="Cameras and recording"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7h12v10H3zM15 11l6-3v8l-6-3"/></svg><span id="camBadge" class="badge hidden">0</span></button>
       <button class="tool" id="share" aria-label="Share invite link"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5M5 14v6h14v-6"/></svg></button>
       <button class="tool" id="fit" aria-label="Fit map to everyone"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
       <button class="tool" id="locme" aria-label="Show where I am"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
@@ -276,6 +299,24 @@ body[data-theme] .leaflet-tile-pane{filter:var(--map);transition:filter .9s}
   </div>
   <div id="chatList"></div>
   <form id="chatForm"><input type="text" id="chatIn" maxlength="200" placeholder="Message" autocomplete="off"><button class="btn sm" type="submit">Send</button></form>
+</div>
+
+<div id="cam" class="hidden">
+  <div id="camHead"><b>Cameras &amp; recording</b><button class="btn ghost sm" id="camClose" aria-label="Close cameras">Close</button></div>
+  <div id="camBody">
+    <div class="camsec">
+      <div class="small">Show my camera to</div>
+      <div id="aud" class="seg"><button data-a="none">Nobody</button><button data-a="seeker">Seekers</button><button data-a="hider">Hiders</button><button data-a="all">Everyone</button></div>
+      <label class="small" style="display:block;margin:10px 0 8px"><input type="checkbox" id="camSound" checked>Include my sound</label>
+      <div class="row2"><button class="btn" id="camToggle">Start camera</button><button class="btn ghost hidden" id="camFlip">Flip</button></div>
+      <video id="camSelf" class="hidden" playsinline muted autoplay></video>
+      <div class="row2" style="margin-top:8px"><button class="btn ghost hidden" id="recSelf">Record my camera</button><button class="btn ghost hidden" id="recScreen">Record screen</button></div>
+      <div class="small" id="recHint" style="margin-top:6px">Nobody means only you see it, which is handy for just recording. Phones can't record the whole screen from a website; use your phone's built-in screen recorder for that.</div>
+    </div>
+    <label class="small" style="display:block;margin:12px 0"><input type="checkbox" id="camAllow" checked>Let other players show me their camera</label>
+    <div id="camIn"></div>
+    <div id="recs"></div>
+  </div>
 </div>
 
 <div id="reveal" class="hidden"><div id="rvWord"></div><div id="rvSub"></div></div>
@@ -753,7 +794,7 @@ function applyState(s){
     if(s.status==='over'){ play('ping'); notify('Manhunt','The game is over.','over'); }
   }
   prevStatus = s.status;
-  render(); syncCalls(); scheduleCountdown();
+  render(); syncCalls(); scheduleCountdown(); syncCam();
   if(pinged){
     // the ping tone may already have been scheduled on the audio clock; only play it now if it wasn't
     const pre = actx && actx.state==='running' && Math.abs(Date.now()-schedPingAt) < 4000;
@@ -1078,6 +1119,10 @@ $('chatForm').onsubmit = e => {
 
 // ---------- team voice (walkie-talkie) ----------
 function onCall(call){
+  if(call.metadata && call.metadata.kind==='cam'){          // someone is showing their camera
+    if(!state || !$('camAllow').checked){ call.close(); return; }
+    call.answer(); wireCam(call); return;
+  }
   const p = state && state.players[call.peer];
   if(!p || p.team!==me.team){ call.close(); return; }
   call.answer(localStream); wireCall(call);
@@ -1113,6 +1158,183 @@ ptt.addEventListener('pointerdown', e => { e.preventDefault(); ptt.setPointerCap
 ptt.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('keydown', e => { if(e.code==='Space' && !e.repeat && document.activeElement.tagName!=='INPUT' && document.activeElement.tagName!=='BUTTON'){ e.preventDefault(); talk(true);} });
 document.addEventListener('keyup', e => { if(e.code==='Space') talk(false); });
+
+// ---------- cameras + recording ----------
+// Show-my-camera: I call each player in the chosen audience with my camera stream. They answer receive-only,
+// so nothing flows back. Recording uses MediaRecorder and hands the file to the phone as a download / share sheet.
+let camStream = null, camAud = null, camFacing = 'environment', camOpen = false, selfRec = null, screenRec = null, screenStream = null;
+const camOut = {}, camIn = {}, camSkip = {};
+
+function setAud(a){
+  camAud = a;
+  document.querySelectorAll('#aud button').forEach(b => b.classList.toggle('on', b.dataset.a===a));
+  if(camStream) syncCam();
+}
+document.querySelectorAll('#aud button').forEach(b => b.onclick = () => { Object.keys(camSkip).forEach(k => delete camSkip[k]); setAud(b.dataset.a); });
+function openCam(){ camOpen = true; $('cam').classList.remove('hidden'); if(!camAud) setAud(me.team==='hider' ? 'seeker' : 'hider'); }
+function closeCam(){ camOpen = false; $('cam').classList.add('hidden'); }
+$('camBtn').onclick = () => camOpen ? closeCam() : openCam();
+$('camClose').onclick = closeCam;
+if(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) $('recScreen').classList.remove('hidden');
+
+function audMatch(p){ if(!p || p.off) return false; if(camAud==='none') return false; if(camAud==='all') return true; return p.team===camAud; }
+function syncCam(){
+  if(!camStream || !peer || !state) return;
+  Object.entries(camOut).forEach(([id,c]) => { if(!audMatch(state.players[id])){ try{ c.close(); }catch(e){} delete camOut[id]; } });
+  Object.entries(state.players).forEach(([id,p]) => {
+    if(p.off) delete camSkip[id];                      // they dropped and came back: offer again
+    if(id===me.id || camOut[id] || camSkip[id] || !audMatch(p)) return;
+    try{
+      const c = peer.call(id, camStream, {metadata:{kind:'cam', name:me.name, team:me.team}});
+      if(!c) return;
+      camOut[id] = c;
+      const gone = () => { if(camOut[id]===c){ delete camOut[id]; camSkip[id] = true; } };   // they closed it: don't keep pestering
+      c.on('close', gone); c.on('error', gone);
+    }catch(e){}
+  });
+}
+async function startCam(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('This browser has no camera support'); return; }
+  const vid = {facingMode:{ideal:camFacing}, width:{ideal:1280}, height:{ideal:720}};
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({video:vid, audio: $('camSound').checked ? {echoCancellation:true, noiseSuppression:true} : false});
+  }catch(e){
+    try{ camStream = await navigator.mediaDevices.getUserMedia({video:vid, audio:false}); if($('camSound').checked) toast('Camera started without sound (mic was unavailable)'); }
+    catch(e2){ toast('Camera blocked. Allow camera access for this site in your browser settings.', 6000); return; }
+  }
+  camStream.getVideoTracks().forEach(t => t.addEventListener('ended', stopCam));
+  const v = $('camSelf'); v.srcObject = camStream; v.classList.toggle('mirror', camFacing==='user'); v.play().catch(()=>{});
+  Object.keys(camSkip).forEach(k => delete camSkip[k]);
+  updateCamUI(); syncCam(); keepAwake();
+}
+function stopCam(){
+  if(selfRec){ try{ selfRec.stop(); }catch(e){} selfRec = null; }
+  Object.values(camOut).forEach(c => { try{ c.close(); }catch(e){} });
+  Object.keys(camOut).forEach(k => delete camOut[k]);
+  if(camStream){ camStream.getTracks().forEach(t => { try{ t.stop(); }catch(e){} }); camStream = null; }
+  $('camSelf').srcObject = null; updateCamUI();
+}
+async function flipCam(){
+  if(!camStream) return;
+  camFacing = camFacing==='environment' ? 'user' : 'environment';
+  const wasRec = !!selfRec; stopCam(); await startCam();
+  if(wasRec) toast('Camera flipped. Recording was saved; start a new one.');
+}
+function updateCamUI(){
+  const on = !!camStream;
+  $('camToggle').textContent = on ? 'Stop camera' : 'Start camera';
+  $('camToggle').classList.toggle('recording', on);
+  $('camFlip').classList.toggle('hidden', !on);
+  $('camSelf').classList.toggle('hidden', !on);
+  $('recSelf').classList.toggle('hidden', !on);
+  $('recSelf').textContent = selfRec ? 'Stop recording' : 'Record my camera';
+  $('recSelf').classList.toggle('recording', !!selfRec);
+  $('recScreen').textContent = screenRec ? 'Stop screen recording' : 'Record screen';
+  $('recScreen').classList.toggle('recording', !!screenRec);
+}
+$('camToggle').onclick = () => camStream ? stopCam() : startCam();
+$('camFlip').onclick = flipCam;
+
+// ---- viewing other people's cameras ----
+function wireCam(call){
+  const key = call.peer, name = (call.metadata && call.metadata.name) || (state.players[key] && state.players[key].name) || 'Player';
+  const old = camIn[key]; if(old){ try{ old.call.close(); }catch(e){} removeTile(key); }
+  camIn[key] = {call, name, stream:null, rec:null, tile:null};
+  call.on('stream', st => {
+    const e = camIn[key]; if(!e || e.call!==call) return;
+    e.stream = st;
+    if(e.tile){ e.tile.querySelector('video').srcObject = st; return; }
+    buildTile(key, st);
+    play('chat'); toast(name+' is showing their camera', 4000);
+    notify('Camera', name+' is showing their camera', 'cam');
+    openCam(); updateCamBadge();
+  });
+  const drop = () => { const e = camIn[key]; if(e && e.call===call){ if(e.rec){ try{ e.rec.stop(); }catch(_){} } removeTile(key); delete camIn[key]; updateCamBadge(); } };
+  call.on('close', drop); call.on('error', drop);
+}
+function buildTile(key, st){
+  const e = camIn[key];
+  const tile = document.createElement('div'); tile.className = 'camtile';
+  const ct = document.createElement('div'); ct.className = 'ct';
+  const dot = document.createElement('i'); dot.className = 'dot';
+  const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = e.name+"'s camera";
+  ct.append(dot, nm);
+  const v = document.createElement('video'); v.playsInline = true; v.autoplay = true; v.srcObject = st;
+  v.play().catch(() => { v.muted = true; v.play().catch(()=>{}); toast('Tap the video to turn sound on'); });
+  v.onclick = () => { v.muted = !v.muted; };
+  const cr = document.createElement('div'); cr.className = 'cr';
+  const rb = document.createElement('button'); rb.className = 'btn ghost sm'; rb.textContent = 'Record this';
+  rb.onclick = () => {
+    if(e.rec){ try{ e.rec.stop(); }catch(_){} return; }
+    e.rec = startRec(e.stream, e.name.replace(/\W+/g,'')+'-cam', on => { if(!on) e.rec = null; rb.textContent = on ? 'Stop recording' : 'Record this'; rb.classList.toggle('recording', on); });
+  };
+  const xb = document.createElement('button'); xb.className = 'btn ghost sm'; xb.textContent = 'Close';
+  xb.onclick = () => { try{ e.call.close(); }catch(_){} };
+  cr.append(rb, xb);
+  tile.append(ct, v, cr); e.tile = tile; $('camIn').appendChild(tile);
+}
+function removeTile(key){ const e = camIn[key]; if(e && e.tile){ e.tile.remove(); e.tile = null; } }
+function updateCamBadge(){ const n = Object.keys(camIn).length, b = $('camBadge'); b.textContent = n; b.classList.toggle('hidden', !n); }
+
+// ---- recording ----
+function pickMime(){
+  const c = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+  for(const m of c){ try{ if(MediaRecorder.isTypeSupported(m)) return m; }catch(e){} }
+  return '';
+}
+function startRec(stream, label, onState){
+  if(!stream){ toast('Nothing to record yet'); return null; }
+  if(!window.MediaRecorder){ toast('Recording is not supported in this browser'); return null; }
+  const mime = pickMime(); let rec;
+  try{ rec = new MediaRecorder(stream, mime ? {mimeType:mime} : undefined); }catch(e){ toast('Could not start recording'); return null; }
+  const chunks = [];
+  rec.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    const type = rec.mimeType || mime || 'video/webm';
+    if(chunks.length) addRecording(new Blob(chunks, {type}), label, type); else toast('Recording was empty');
+    onState && onState(false);
+  };
+  rec.start(1000); onState && onState(true);
+  return rec;
+}
+function addRecording(blob, label, type){
+  const ext = type.includes('mp4') ? 'mp4' : 'webm';
+  const name = 'manhunt-'+label+'-'+new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)+'.'+ext;
+  const url = URL.createObjectURL(blob);
+  const row = document.createElement('div'); row.className = 'rec';
+  const t = document.createElement('div'); t.className = 'rn'; t.textContent = name+' ('+(blob.size/1048576).toFixed(1)+' MB)';
+  const a = document.createElement('a'); a.className = 'btn sm'; a.textContent = 'Save again'; a.href = url; a.download = name;
+  row.append(t, a);
+  try{
+    const f = new File([blob], name, {type});
+    if(navigator.canShare && navigator.canShare({files:[f]})){
+      const s = document.createElement('button'); s.className = 'btn ghost sm'; s.textContent = 'Share / Photos';
+      s.onclick = () => navigator.share({files:[f], title:'Manhunt recording'}).catch(()=>{});
+      row.appendChild(s);
+    }
+  }catch(e){}
+  $('recs').prepend(row);
+  try{ a.click(); }catch(e){}                       // try to save straight away; the buttons are there if the phone blocks it
+  toast('Recording saved. If it did not download, tap Save or Share in the Cameras panel.', 6000);
+  if(!camOpen) openCam();
+}
+$('recSelf').onclick = () => {
+  if(selfRec){ try{ selfRec.stop(); }catch(e){} return; }
+  selfRec = startRec(camStream, 'my-camera', on => { if(!on) selfRec = null; updateCamUI(); });
+  updateCamUI();
+};
+$('recScreen').onclick = async () => {
+  if(screenRec){ try{ screenRec.stop(); }catch(e){} return; }
+  try{
+    screenStream = await navigator.mediaDevices.getDisplayMedia({video:true, audio:true});
+  }catch(e){ toast('Screen recording was cancelled or is not allowed'); return; }
+  screenStream.getVideoTracks()[0].addEventListener('ended', () => { if(screenRec){ try{ screenRec.stop(); }catch(e){} } });
+  screenRec = startRec(screenStream, 'screen', on => {
+    if(!on){ screenRec = null; if(screenStream){ screenStream.getTracks().forEach(t => t.stop()); screenStream = null; } }
+    updateCamUI();
+  });
+  updateCamUI();
+};
 
 // ---------- auto-resume ----------
 // If the phone discarded the tab (or you reloaded), reopening the site puts you straight back into your room.
