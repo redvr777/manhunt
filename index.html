@@ -304,6 +304,9 @@ const seenAreas = new Set();
 const conns = {}, calls = {}, audioEls = {};
 let map, layerPings, layerLive, meMarker, fitted = false;
 const store = { get:k=>{ try{return localStorage.getItem(k)}catch(e){return null} }, set:(k,v)=>{ try{localStorage.setItem(k,v)}catch(e){} } };
+// a permanent id for this phone, so rejoining is recognised as the SAME player instead of creating a duplicate
+const uid = (() => { let u = store.get('mh_uid'); if(!u){ u = Math.random().toString(36).slice(2,10); store.set('mh_uid', u); } return u; })();
+let resumed = false, reconUntil = 0, reconBusy = false, reconTimer = null, recreating = false;
 
 // ---------- helpers ----------
 function toast(msg, ms=3500){ const t=$('toast'); t.textContent=msg; t.classList.remove('hidden'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.add('hidden'),ms); }
@@ -423,7 +426,22 @@ function getFix(ok, bad){
 let wakeLock = null;
 async function keepAwake(){ try{ if('wakeLock' in navigator && (!wakeLock || wakeLock.released)){ wakeLock = await navigator.wakeLock.request('screen'); } }catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && state && state.status==='running') keepAwake(); });
-window.addEventListener('pagehide',()=>{ try{ peer && peer.destroy(); }catch(e){} });
+// NOTE: we deliberately do NOT destroy the peer on pagehide/background any more. Leaving the tab must never drop you from the game.
+// Reconnect watchdog: whenever the page comes back (or the network returns), reconnect to the signaling server and to the host.
+function wakeUp(){
+  try{ if(peer && peer.disconnected && !peer.destroyed) peer.reconnect(); }catch(e){}
+  if(entered && state && !me.isHost && !hostConn && !migrating){ reconUntil = Date.now()+45000; attemptReconnect(); }
+}
+document.addEventListener('visibilitychange', () => { if(document.visibilityState==='visible') wakeUp(); });
+window.addEventListener('online', wakeUp);
+window.addEventListener('pageshow', wakeUp);
+setInterval(() => {
+  try{
+    if(peer && peer.disconnected && !peer.destroyed) peer.reconnect();
+    else if(peer && peer.destroyed && entered && !me.isHost && !recreating){ recreating = true; newGuestPeer(0); }
+  }catch(e){}
+}, 5000);
+setInterval(() => { if(entered && me.code) store.set('mh_sess', JSON.stringify({code:me.code, ts:Date.now()})); }, 60000);
 
 // ---------- profile picture / name (saved on device) ----------
 const validPic = s => typeof s==='string' && s.startsWith('data:image/jpeg;base64,') && s.length<20000;
@@ -452,6 +470,7 @@ const params = new URLSearchParams(location.search);
 if(params.get('room')) $('code').value = params.get('room').toUpperCase();
 
 function commonPeer(){
+  peer.on('disconnected', () => { setTimeout(() => { try{ if(peer && peer.disconnected && !peer.destroyed) peer.reconnect(); }catch(e){} }, 1000); });
   peer.on('call', onCall);
   peer.on('connection', c => {
     if(me.isHost) hostAccept(c);
@@ -463,6 +482,7 @@ $('create').onclick = async () => {
   unlockAudio(); askNotify();
   me.name = $('name').value.trim() || 'Host'; store.set('mh_name', me.name); me.isHost = true;
   const chars='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; me.code=''; for(let i=0;i<4;i++) me.code+=chars[Math.floor(Math.random()*chars.length)];
+  store.set('mh_sess', JSON.stringify({code:me.code, ts:Date.now()}));
   await getMic();
   peer = new Peer('manhunt-'+me.code);
   peer.on('error', e => toast(e.type==='unavailable-id' ? 'Code clash, try again' : 'Connection error: '+e.type));
@@ -475,16 +495,31 @@ $('create').onclick = async () => {
   commonPeer();
 };
 
-$('joinbtn').onclick = async () => {
+async function doJoin(){
   unlockAudio(); askNotify();
   me.name = $('name').value.trim() || 'Player'; store.set('mh_name', me.name); me.code = $('code').value.trim().toUpperCase();
   if(me.code.length!==4){ toast('Enter the 4-letter room code'); return; }
   await getMic();
-  peer = new Peer();
-  peer.on('error', e => { if(!entered) toast(e.type==='peer-unavailable' ? 'Room not found' : 'Connection error: '+e.type); });
-  peer.on('open', id => { me.id = id; connectToHost('manhunt-'+me.code, ok => { if(!ok && !entered) toast('Could not join that room'); }); });
+  store.set('mh_sess', JSON.stringify({code:me.code, ts:Date.now()}));
+  newGuestPeer(0);
+}
+$('joinbtn').onclick = () => doJoin();
+// Guests use a permanent id (room code + this phone's uid). Coming back reuses the same id, so the host
+// sees the same player returning rather than a new one. If the old id is still registered, wait and retry.
+function newGuestPeer(tries){
+  try{ if(peer && !peer.destroyed) peer.destroy(); }catch(e){}
+  peer = new Peer('mhp-'+me.code+'-'+uid);
+  peer.on('error', e => {
+    if(e.type==='unavailable-id' && tries<15){ setTimeout(()=>newGuestPeer(tries+1), 3000); if(!entered) toast('Reconnecting…'); return; }
+    if(e.type==='peer-unavailable'){ if(!entered){ toast('Room not found'); store.set('mh_sess',''); } return; }
+    if(!entered) toast('Connection error: '+e.type);
+  });
+  peer.on('open', id => {
+    me.id = id; recreating = false;
+    connectToHost('manhunt-'+me.code, ok => { if(!ok && !entered){ toast('Could not join that room'); store.set('mh_sess',''); } else if(!ok && entered){ reconUntil = Date.now()+45000; attemptReconnect(); } });
+  });
   commonPeer();
-};
+}
 
 function connectToHost(hostId, cb){
   const c = peer.connect(hostId, {reliable:true});
@@ -508,7 +543,26 @@ function connectToHost(hostId, cb){
 }
 
 // ---------- host migration ----------
+// Losing the host connection (phone backgrounded, bad signal) first tries to just reconnect for 45s.
+// Only if the host really stays gone do we pick a new host.
 function onHostLost(){
+  if(migrating || !state || me.isHost) return;
+  if(!reconUntil || Date.now() > reconUntil) reconUntil = Date.now()+45000;
+  attemptReconnect();
+}
+function attemptReconnect(){
+  if(me.isHost || hostConn || !state || migrating || reconBusy) return;
+  clearTimeout(reconTimer);
+  if(Date.now() > reconUntil){ reconUntil = 0; startMigration(); return; }
+  reconBusy = true;
+  try{ if(peer && peer.disconnected && !peer.destroyed) peer.reconnect(); }catch(e){}
+  connectToHost(state.hostId, ok => {
+    reconBusy = false;
+    if(ok){ reconUntil = 0; toast('Back in the game'); }
+    else reconTimer = setTimeout(attemptReconnect, 2500);
+  });
+}
+function startMigration(){
   if(migrating || !state || me.isHost) return;
   migrating = true; toast('Host left. Choosing a new host…', 6000);
   const old = state.hostId;
@@ -547,11 +601,16 @@ function startLobbyPeer(n){           // keeps the room code working for late jo
   lp.on('connection', c => c.on('open', () => { c.send({t:'redirect', id:me.id}); setTimeout(()=>c.close(),800); }));
   lp.on('error', e => { if(e.type==='unavailable-id'){ try{lp.destroy()}catch(_){} setTimeout(()=>startLobbyPeer(n+1), 4000); } });
 }
+// Disconnecting never removes a player. They're marked offline and keep their team, and they snap back in when they return.
+// (Offline players in the lobby are cleaned up after 2 minutes by hostTick; mid-game they are never removed.)
 function removeOrOff(id){
   if(!state.players[id]) return;
   delete liveStore[id];
-  if(state.status==='lobby'){ delete state.players[id]; state.order = state.order.filter(x=>x!==id); delete state.locs[id]; }
-  else state.players[id].off = true;
+  state.players[id].off = true; state.players[id].offAt = Date.now();
+}
+function dropPlayer(id){
+  if(!state.players[id]) return;
+  delete liveStore[id]; delete state.players[id]; state.order = state.order.filter(x=>x!==id); delete state.locs[id];
 }
 function prune(){
   let ch=false;
@@ -643,6 +702,11 @@ function firePing(){
 }
 function hostTick(){
   if(!me.isHost) return;
+  if(state.status==='lobby'){
+    let ch = false;
+    Object.keys(state.players).forEach(id => { const p = state.players[id]; if(id!==me.id && p.off && Date.now()-(p.offAt||0) > 120000){ dropPlayer(id); ch = true; } });
+    if(ch) broadcast();
+  }
   if(state.status==='running' && Date.now() >= state.nextPing){
     state.nextPing += state.pingMin*60000;
     firePing();
@@ -665,7 +729,7 @@ $('rand').onclick = () => {
   broadcast(); toast('Teams randomized');
 };
 $('end').onclick = () => { state.status='over'; liveStore={}; broadcast(); };
-$('again').onclick = () => { resetChatHost(); state.status='lobby'; state.locs={}; liveStore={}; state.pingN=0; Object.keys(state.players).forEach(id=>{ if(state.players[id].off) removeOrOff(id); }); broadcast(); };
+$('again').onclick = () => { resetChatHost(); state.status='lobby'; state.locs={}; liveStore={}; state.pingN=0; Object.keys(state.players).forEach(id=>{ if(state.players[id].off) dropPlayer(id); }); broadcast(); };
 
 // ---------- client state ----------
 function send(d){ if(me.isHost) hostHandle(me.id, d); else if(hostConn && hostConn.open) hostConn.send(d); }
@@ -684,7 +748,7 @@ function applyState(s){
   } else { live = {}; stopWatch(); }
   if(s.status!==prevStatus){
     setSheet(s.status!=='running');
-    if(s.status==='running') showReveal();
+    if(s.status==='running' && !resumed) showReveal();
     if(s.status==='lobby') seenAreas.clear();
     if(s.status==='over'){ play('ping'); notify('Manhunt','The game is over.','over'); }
   }
@@ -1049,6 +1113,20 @@ ptt.addEventListener('pointerdown', e => { e.preventDefault(); ptt.setPointerCap
 ptt.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('keydown', e => { if(e.code==='Space' && !e.repeat && document.activeElement.tagName!=='INPUT' && document.activeElement.tagName!=='BUTTON'){ e.preventDefault(); talk(true);} });
 document.addEventListener('keyup', e => { if(e.code==='Space') talk(false); });
+
+// ---------- auto-resume ----------
+// If the phone discarded the tab (or you reloaded), reopening the site puts you straight back into your room.
+(function(){
+  try{
+    const s = JSON.parse(store.get('mh_sess')||'null');
+    const want = params.get('room') ? params.get('room').toUpperCase() : null;
+    if(s && s.code && Date.now()-s.ts < 12*3600e3 && (!want || want===s.code)){
+      $('code').value = s.code; resumed = true;
+      toast('Rejoining '+s.code+'…', 5000);
+      doJoin().then(() => setTimeout(() => { resumed = false; }, 8000));
+    }
+  }catch(e){}
+})();
 </script>
 </body>
 </html>
