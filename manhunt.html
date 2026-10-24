@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Manhunt HQ</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--bg:#0f1318;--panel:#171d25;--line:#2a3441;--text:#e8edf3;--mute:#8896a7;--hider:#ff5a4f;--seeker:#4aa8ff;--ok:#3ecf8e}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+button,input,select{font:inherit;color:inherit}
+.hidden{display:none!important}
+#join{max-width:420px;margin:0 auto;padding:max(24px,env(safe-area-inset-top)) 20px 40px}
+h1{font-size:28px;margin:16px 0 4px;letter-spacing:.5px}
+.sub{color:var(--mute);margin:0 0 22px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--mute);margin:10px 0 6px}
+input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#0f141b}
+.btn{width:100%;padding:13px;border:0;border-radius:10px;background:var(--seeker);color:#04101c;font-weight:700;cursor:pointer;margin-top:12px}
+.btn.alt{background:#232c38;color:var(--text);border:1px solid var(--line)}
+.btn.red{background:var(--hider);color:#1c0503}
+.teams{display:flex;gap:8px}
+.teams label{flex:1;margin:0;text-transform:none;letter-spacing:0;font-size:15px;color:var(--text)}
+.teams input{display:none}
+.teams span{display:block;text-align:center;padding:11px;border-radius:10px;border:1px solid var(--line);cursor:pointer}
+.teams input:checked+span.h{background:var(--hider);color:#1c0503;border-color:var(--hider);font-weight:700}
+.teams input:checked+span.s{background:var(--seeker);color:#04101c;border-color:var(--seeker);font-weight:700}
+.teams input:disabled+span{opacity:.5;cursor:not-allowed}
+#app{display:flex;flex-direction:column;height:100dvh}
+#top{display:flex;align-items:center;justify-content:space-between;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;background:var(--panel);border-bottom:1px solid var(--line);gap:8px}
+#top b{font-size:16px}
+.chip{padding:3px 9px;border-radius:99px;border:1px solid var(--line);font-size:12px;color:var(--mute)}
+#map{flex:1;min-height:200px}
+#panel{background:var(--panel);border-top:1px solid var(--line);padding:12px 12px calc(12px + env(safe-area-inset-bottom));max-height:52dvh;overflow:auto}
+#count{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
+#countlbl{color:var(--mute);font-size:13px}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1}
+#players{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#players li{background:#0f141b;border:1px solid var(--line);border-radius:9px;padding:7px 9px;font-size:14px;display:flex;justify-content:space-between;gap:6px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+.dot.h{background:var(--hider)}.dot.s{background:var(--seeker)}
+#ptt{width:100%;padding:20px;border-radius:14px;border:2px solid var(--line);background:#232c38;font-weight:800;font-size:17px;margin-top:12px;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#ptt.live{background:var(--ok);color:#03150d;border-color:var(--ok)}
+#toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:#000c;border:1px solid var(--line);padding:9px 14px;border-radius:10px;z-index:1000;max-width:90vw;text-align:center}
+.small{font-size:12px;color:var(--mute)}
+.leaflet-tooltip{background:#111;color:#fff;border:0}
+</style>
+</head>
+<body>
+
+<div id="join">
+  <h1>MANHUNT HQ</h1>
+  <p class="sub">Live map, 5-minute hider pings, team walkie-talkies.</p>
+  <div class="card">
+    <label>Your name</label>
+    <input type="text" id="name" maxlength="16" placeholder="e.g. Jake" autocomplete="off">
+    <label>Your team</label>
+    <div class="teams">
+      <label><input type="radio" name="jt" value="hider" checked><span class="h">Hider</span></label>
+      <label><input type="radio" name="jt" value="seeker"><span class="s">Seeker</span></label>
+    </div>
+  </div>
+  <div class="card">
+    <button class="btn" id="create">Create a game (I'm the host)</button>
+  </div>
+  <div class="card">
+    <label>Or join with a room code</label>
+    <input type="text" id="code" maxlength="4" placeholder="ABCD" autocomplete="off" style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-size:20px">
+    <button class="btn alt" id="joinbtn">Join game</button>
+  </div>
+  <p class="small">Location is only read at the moment a ping fires (hiders only). The mic is only live while you hold the talk button. Needs HTTPS (any normal web host works).</p>
+</div>
+
+<div id="app" class="hidden">
+  <div id="top">
+    <div><b id="roomcode"></b> <span class="chip" id="status"></span></div>
+    <div class="row" style="flex:0 0 auto">
+      <button class="btn alt" id="share" style="margin:0;padding:7px 11px;width:auto">Share</button>
+      <button class="btn alt" id="fit" style="margin:0;padding:7px 11px;width:auto">Fit</button>
+      <button class="btn alt" id="locme" style="margin:0;padding:7px 11px;width:auto">Me</button>
+    </div>
+  </div>
+  <div id="map"></div>
+  <div id="panel">
+    <div id="countlbl">Waiting to start</div>
+    <div id="count">--:--</div>
+
+    <div id="lobbyBox">
+      <label>Your team</label>
+      <div class="teams">
+        <label><input type="radio" name="t" value="hider"><span class="h">Hider</span></label>
+        <label><input type="radio" name="t" value="seeker"><span class="s">Seeker</span></label>
+      </div>
+      <div id="hostSettings" class="hidden">
+        <div class="row">
+          <div><label>Hide time (min)</label><input type="number" id="hideMin" value="10" min="0" max="120"></div>
+          <div><label>Ping every (min)</label><input type="number" id="pingMin" value="5" min="1" max="60"></div>
+        </div>
+        <button class="btn" id="start">Start game</button>
+      </div>
+      <div id="guestWait" class="small" style="margin-top:10px">Waiting for the host to start…</div>
+    </div>
+
+    <div id="runBox" class="hidden">
+      <div class="row">
+        <button class="btn red hidden" id="end">End game</button>
+        <button class="btn alt hidden" id="again">New round</button>
+      </div>
+    </div>
+
+    <button id="ptt">HOLD TO TALK (team radio)</button>
+    <div class="small" id="micnote" style="margin-top:6px"></div>
+    <ul id="players"></ul>
+  </div>
+</div>
+<div id="toast" class="hidden"></div>
+<div id="audios"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+// Reserved for a future Unity/PUN2 build. Browsers can't use Photon Voice, so this site uses WebRTC (PeerJS).
+const CFG = { photonPunAppId:'e311f009-c6be-433f-bda5-ee47fe131d88', photonVoiceAppId:'03e1ff28-3112-4a10-a254-8230478e742e' };
+
+const $ = id => document.getElementById(id);
+const me = { id:null, name:'', team:'hider', isHost:false, code:'' };
+let peer, hostConn = null, localStream = null, state = null, skew = 0, lastPingN = null, firstState = true;
+const conns = {}, calls = {}, audioEls = {};
+let map, layer, meMarker, fitted = false, wakeLock = null;
+
+// ---------- helpers ----------
+function toast(msg, ms=3500){ const t=$('toast'); t.textContent=msg; t.classList.remove('hidden'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.add('hidden'),ms); }
+function fmt(ms){ ms=Math.max(0,Math.ceil(ms/1000)); const m=Math.floor(ms/60), s=ms%60; return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
+function ago(ts){ const s=Math.round((Date.now()+skew-ts)/1000); if(s<60) return s+'s ago'; return Math.round(s/60)+' min ago'; }
+function beep(){ try{ const c=new (window.AudioContext||window.webkitAudioContext)(); const o=c.createOscillator(), g=c.createGain(); o.connect(g); g.connect(c.destination); o.frequency.value=880; g.gain.value=.15; o.start(); o.stop(c.currentTime+.35);}catch(e){} if(navigator.vibrate) navigator.vibrate([200,100,200]); }
+async function getMic(){
+  try{
+    localStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    localStream.getAudioTracks().forEach(t=>t.enabled=false);
+    $('micnote').textContent='';
+  }catch(e){
+    localStream = new MediaStream();
+    $('micnote').textContent='Mic unavailable — you can listen but not talk. Allow microphone access and rejoin.';
+  }
+}
+async function keepAwake(){ try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){} }
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && state && state.status==='running') keepAwake(); });
+
+// ---------- join / create ----------
+const params = new URLSearchParams(location.search);
+if(params.get('room')) $('code').value = params.get('room').toUpperCase();
+const selTeam = () => document.querySelector('input[name=jt]:checked').value;
+
+$('create').onclick = async () => {
+  me.name = $('name').value.trim() || 'Host'; me.team = selTeam(); me.isHost = true;
+  const chars='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; me.code=''; for(let i=0;i<4;i++) me.code+=chars[Math.floor(Math.random()*chars.length)];
+  await getMic();
+  peer = new Peer('manhunt-'+me.code);
+  peer.on('error', e => { if(e.type==='unavailable-id'){ toast('Code clash, try again'); } else toast('Connection error: '+e.type); });
+  peer.on('open', id => {
+    me.id = id;
+    state = { status:'lobby', players:{[id]:{name:me.name,team:me.team}}, hideMin:10, pingMin:5, startAt:0, nextPing:0, pingN:0, locs:{} };
+    enterApp(); broadcast();
+  });
+  peer.on('connection', hostAccept);
+  peer.on('call', onCall);
+  setInterval(hostTick, 1000);
+};
+
+$('joinbtn').onclick = async () => {
+  me.name = $('name').value.trim() || 'Player'; me.team = selTeam(); me.code = $('code').value.trim().toUpperCase();
+  if(me.code.length!==4){ toast('Enter the 4-letter room code'); return; }
+  await getMic();
+  peer = new Peer();
+  peer.on('error', e => toast(e.type==='peer-unavailable' ? 'Room not found' : 'Connection error: '+e.type));
+  peer.on('open', id => {
+    me.id = id;
+    hostConn = peer.connect('manhunt-'+me.code, {reliable:true});
+    hostConn.on('open', () => { hostConn.send({t:'hello', name:me.name, team:me.team}); enterApp(); });
+    hostConn.on('data', d => { if(d.t==='state') applyState(d.s); else if(d.t==='ping') doPing(); });
+    hostConn.on('close', () => toast('Disconnected from host', 10000));
+  });
+  peer.on('call', onCall);
+};
+
+function enterApp(){
+  $('join').classList.add('hidden'); $('app').classList.remove('hidden');
+  $('roomcode').textContent = 'Room '+me.code;
+  $('hostSettings').classList.toggle('hidden', !me.isHost);
+  $('guestWait').classList.toggle('hidden', me.isHost);
+  document.querySelector(`input[name=t][value=${me.team}]`).checked = true;
+  initMap();
+}
+
+// ---------- host logic ----------
+function hostAccept(c){
+  c.on('open', () => { conns[c.peer] = c; });
+  c.on('data', d => hostHandle(c.peer, d));
+  c.on('close', () => { delete conns[c.peer]; if(state.players[c.peer]){ delete state.players[c.peer]; broadcast(); } });
+}
+function hostHandle(pid, d){
+  if(d.t==='hello'){ state.players[pid]={name:String(d.name).slice(0,16), team:d.team==='seeker'?'seeker':'hider'}; }
+  else if(d.t==='team'){ if(state.status==='lobby' && state.players[pid]) state.players[pid].team = d.team==='seeker'?'seeker':'hider'; }
+  else if(d.t==='loc'){
+    const arr = state.locs[pid] = state.locs[pid] || [];
+    if(d.err) arr.push({n:state.pingN, err:true, ts:Date.now()});
+    else arr.push({n:state.pingN, lat:d.lat, lng:d.lng, acc:d.acc, ts:Date.now()});
+    if(arr.length>40) arr.shift();
+  }
+  broadcast();
+}
+function broadcast(){
+  state.now = Date.now();
+  Object.values(conns).forEach(c => { try{ c.send({t:'state', s:state}); }catch(e){} });
+  applyState(JSON.parse(JSON.stringify(state)));
+}
+function hostTick(){
+  if(state.status==='running' && Date.now() >= state.nextPing){
+    state.pingN++; state.nextPing += state.pingMin*60000;
+    Object.values(conns).forEach(c => { try{ c.send({t:'ping'}); }catch(e){} });
+    doPing(); broadcast();
+  }
+}
+$('start').onclick = () => {
+  state.hideMin = Math.max(0, +$('hideMin').value||0); state.pingMin = Math.max(1, +$('pingMin').value||5);
+  state.locs = {}; state.pingN = 0; state.startAt = Date.now(); state.nextPing = Date.now() + state.hideMin*60000;
+  if(state.hideMin===0) state.nextPing = Date.now()+1000;
+  state.status = 'running'; broadcast(); keepAwake();
+};
+$('end').onclick = () => { state.status='over'; broadcast(); };
+$('again').onclick = () => { state.status='lobby'; state.locs={}; state.pingN=0; broadcast(); };
+
+// ---------- client state ----------
+function send(d){ if(me.isHost) hostHandle(me.id, d); else if(hostConn && hostConn.open) hostConn.send(d); }
+document.querySelectorAll('input[name=t]').forEach(r => r.onchange = () => { me.team = r.value; send({t:'team', team:r.value}); });
+
+function applyState(s){
+  state = s; skew = s.now - Date.now();
+  const mine = s.players[me.id]; if(mine) me.team = mine.team;
+  if(!firstState && lastPingN!==null && s.pingN > lastPingN){ beep(); toast('📍 PING! Hider locations updated'); }
+  lastPingN = s.pingN; firstState = false;
+  if(s.status==='running') keepAwake();
+  render(); syncCalls();
+}
+
+function doPing(){
+  if(me.team!=='hider' || !state || state.status!=='running') return;
+  toast('Ping! Sharing your location once…');
+  if(!navigator.geolocation){ send({t:'loc', err:'unsupported'}); return; }
+  navigator.geolocation.getCurrentPosition(
+    p => send({t:'loc', lat:p.coords.latitude, lng:p.coords.longitude, acc:p.coords.accuracy}),
+    e => { toast('Could not get your location: '+e.message); send({t:'loc', err:e.message}); },
+    {enableHighAccuracy:true, timeout:20000, maximumAge:0}
+  );
+}
+
+// ---------- render ----------
+function render(){
+  const s = state;
+  $('status').textContent = {lobby:'Lobby',running:'In progress',over:'Game over'}[s.status];
+  const lobby = s.status==='lobby';
+  $('lobbyBox').classList.toggle('hidden', !lobby);
+  $('runBox').classList.toggle('hidden', lobby);
+  $('end').classList.toggle('hidden', !(me.isHost && s.status==='running'));
+  $('again').classList.toggle('hidden', !(me.isHost && s.status==='over'));
+  document.querySelector(`input[name=t][value=${me.team}]`).checked = true;
+
+  const ul = $('players'); ul.innerHTML='';
+  Object.entries(s.players).forEach(([id,p]) => {
+    const li = document.createElement('li');
+    const l = document.createElement('span'); const d=document.createElement('i'); d.className='dot '+(p.team==='hider'?'h':'s');
+    l.appendChild(d); l.appendChild(document.createTextNode(p.name+(id===me.id?' (you)':'')));
+    li.appendChild(l);
+    const last = (s.locs[id]||[]).slice(-1)[0];
+    if(last){ const r=document.createElement('span'); r.className='small'; r.textContent = last.err ? 'no fix' : ago(last.ts); li.appendChild(r); }
+    ul.appendChild(li);
+  });
+  drawMap(); tick();
+}
+
+function tick(){
+  if(!state) return;
+  const s = state, now = Date.now()+skew;
+  if(s.status==='running'){
+    $('countlbl').textContent = s.pingN===0 ? 'Hiders are hiding — first ping in' : 'Next ping in';
+    $('count').textContent = fmt(s.nextPing-now);
+  } else if(s.status==='over'){ $('countlbl').textContent='Game over'; $('count').textContent='--:--'; }
+  else { $('countlbl').textContent='Waiting to start'; $('count').textContent='--:--'; }
+}
+setInterval(tick, 500);
+
+// ---------- map ----------
+function initMap(){
+  map = L.map('map',{zoomControl:true}).setView([39,-98],4);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  layer = L.layerGroup().addTo(map);
+  setTimeout(()=>map.invalidateSize(),200);
+}
+function drawMap(){
+  layer.clearLayers(); const pts=[];
+  Object.entries(state.locs).forEach(([id,arr]) => {
+    const p = state.players[id]; if(!p) return;
+    const good = arr.filter(a=>!a.err);
+    if(!good.length) return;
+    const trail = good.map(a=>[a.lat,a.lng]);
+    if(trail.length>1) L.polyline(trail,{color:'#ff5a4f',weight:2,opacity:.45,dashArray:'4 6'}).addTo(layer);
+    good.slice(0,-1).forEach(a => L.circleMarker([a.lat,a.lng],{radius:4,color:'#ff5a4f',weight:1,fillOpacity:.35}).addTo(layer));
+    const last = good[good.length-1];
+    L.circle([last.lat,last.lng],{radius:Math.max(last.acc||10,5),color:'#ff5a4f',weight:1,fillOpacity:.1}).addTo(layer);
+    L.circleMarker([last.lat,last.lng],{radius:9,color:'#fff',weight:2,fillColor:'#ff5a4f',fillOpacity:1})
+      .bindTooltip(`${p.name} · ping #${last.n} · ${ago(last.ts)}`,{permanent:true,direction:'top',offset:[0,-8]}).addTo(layer);
+    pts.push([last.lat,last.lng]);
+  });
+  if(pts.length && !fitted){ fitMap(); fitted=true; }
+}
+function fitMap(){
+  const pts=[]; Object.values(state.locs).forEach(a=>{ const g=a.filter(x=>!x.err).slice(-1)[0]; if(g) pts.push([g.lat,g.lng]); });
+  if(meMarker) pts.push(meMarker.getLatLng());
+  if(pts.length===1) map.setView(pts[0],17); else if(pts.length>1) map.fitBounds(pts,{padding:[50,50]});
+}
+$('fit').onclick = fitMap;
+$('locme').onclick = () => {
+  navigator.geolocation.getCurrentPosition(p => {
+    const ll=[p.coords.latitude,p.coords.longitude];
+    if(meMarker) meMarker.setLatLng(ll); else meMarker=L.circleMarker(ll,{radius:8,color:'#fff',weight:2,fillColor:'#4aa8ff',fillOpacity:1}).bindTooltip('You (private, one-time)').addTo(map);
+    map.setView(ll,17);
+  }, e => toast('Location error: '+e.message), {enableHighAccuracy:true,timeout:15000});
+};
+$('share').onclick = async () => {
+  const url = location.origin+location.pathname+'?room='+me.code;
+  try{ if(navigator.share) await navigator.share({title:'Manhunt',text:'Join my manhunt game',url}); else { await navigator.clipboard.writeText(url); toast('Invite link copied'); } }catch(e){}
+};
+
+// ---------- team voice (walkie-talkie) ----------
+function onCall(call){
+  const p = state && state.players[call.peer];
+  if(!p || p.team!==me.team){ call.close(); return; }
+  call.answer(localStream); wireCall(call);
+}
+function wireCall(call){
+  calls[call.peer] = call;
+  call.on('stream', st => {
+    let a = audioEls[call.peer];
+    if(!a){ a=document.createElement('audio'); a.autoplay=true; a.setAttribute('playsinline',''); $('audios').appendChild(a); audioEls[call.peer]=a; }
+    a.srcObject = st; a.play().catch(()=>{});
+  });
+  const drop = () => { if(calls[call.peer]===call) delete calls[call.peer]; const a=audioEls[call.peer]; if(a){ a.remove(); delete audioEls[call.peer]; } };
+  call.on('close', drop); call.on('error', drop);
+}
+function syncCalls(){
+  if(!state || !localStream) return;
+  Object.entries(calls).forEach(([id,c]) => { const p=state.players[id]; if(!p || p.team!==me.team){ c.close(); delete calls[id]; const a=audioEls[id]; if(a){a.remove(); delete audioEls[id];} } });
+  Object.entries(state.players).forEach(([id,p]) => {
+    if(id===me.id || p.team!==me.team || calls[id]) return;
+    if(me.id < id){ const c = peer.call(id, localStream); if(c) wireCall(c); }
+  });
+}
+function talk(on){
+  if(!localStream) return;
+  localStream.getAudioTracks().forEach(t => t.enabled = on);
+  $('ptt').classList.toggle('live', on);
+  $('ptt').textContent = on ? 'TRANSMITTING…' : 'HOLD TO TALK (team radio)';
+  if(navigator.vibrate) navigator.vibrate(on?20:0);
+}
+const ptt = $('ptt');
+ptt.addEventListener('pointerdown', e => { e.preventDefault(); ptt.setPointerCapture(e.pointerId); talk(true); });
+['pointerup','pointercancel'].forEach(ev => ptt.addEventListener(ev, () => talk(false)));
+ptt.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('keydown', e => { if(e.code==='Space' && !e.repeat && document.activeElement.tagName!=='INPUT'){ e.preventDefault(); talk(true);} });
+document.addEventListener('keyup', e => { if(e.code==='Space') talk(false); });
+</script>
+</body>
+</html>
