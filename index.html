@@ -1,611 +1,1354 @@
 <!doctype html>
-<html lang="en"><head>
+<html lang="en">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0d0f13">
-<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Manhunt">
 <title>Manhunt</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link href="https://fonts.googleapis.com/css2?family=Anybody:wdth,wght@50..150,100..900&family=Karla:wght@400;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anybody:wdth,wght@50..150,100..900&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-:root{--hc:#ff5b1f;--sc:#4cc9ff;--dockH:calc(104px + env(safe-area-inset-bottom));--disp:'Anybody','Arial Narrow',Impact,sans-serif;--body:'Karla',system-ui,sans-serif}
-body[data-theme=neutral]{--bg:#101216;--sf:#1a1d24;--sf2:#272b34;--tx:#f1f0ec;--mute:#8f94a0;--ac:#f1f0ec;--on:#101216;--map:invert(1) grayscale(1) brightness(.8) contrast(1.2)}
-body[data-theme=hider]{--bg:#160a0a;--sf:#231110;--sf2:#351b16;--tx:#ffeadb;--mute:#b98f7f;--ac:#ff5b1f;--on:#1a0600;--map:invert(1) grayscale(1) sepia(1) hue-rotate(-18deg) saturate(2.4) brightness(.85) contrast(1.2)}
-body[data-theme=seeker]{--bg:#06141b;--sf:#0c212b;--sf2:#133140;--tx:#e2f6ff;--mute:#7fa6b6;--ac:#4cc9ff;--on:#031219;--map:invert(1) grayscale(1) sepia(1) hue-rotate(150deg) saturate(2.1) brightness(.85) contrast(1.2)}
+/* Two teams, two skins. Ember = hiders, ice = seekers. Everything reads its colors from the body theme. */
+:root{--hc:#ff5b1f;--sc:#4cc9ff;--dockH:calc(100px + env(safe-area-inset-bottom));--disp:'Anybody','Arial Narrow',Impact,sans-serif;--body:'Karla',system-ui,sans-serif}
+body[data-theme=neutral]{--bg:#101216;--sf:#1a1d24;--sf2:#272b34;--tx:#f1f0ec;--mute:#8f94a0;--ac:#f1f0ec;--on:#101216;--ac2:#c9c6bb;--map:invert(1) grayscale(1) brightness(.8) contrast(1.2)}
+body[data-theme=hider]{--bg:#160a0a;--sf:#231110;--sf2:#351b16;--tx:#ffeadb;--mute:#b98f7f;--ac:#ff5b1f;--on:#1a0600;--ac2:#ffb03a;--map:invert(1) grayscale(1) sepia(1) hue-rotate(-18deg) saturate(2.4) brightness(.85) contrast(1.2)}
+body[data-theme=seeker]{--bg:#06141b;--sf:#0c212b;--sf2:#133140;--tx:#e2f6ff;--mute:#7fa6b6;--ac:#4cc9ff;--on:#031219;--ac2:#ffffff;--map:invert(1) grayscale(1) sepia(1) hue-rotate(150deg) saturate(2.1) brightness(.85) contrast(1.2)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font:16px/1.4 var(--body);transition:background .6s}
-button,input{font:inherit;color:inherit}.hidden{display:none!important}
-body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:5000;opacity:.08;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
-.btn{display:block;width:100%;padding:14px 16px;border:0;border-radius:16px 4px 16px 4px;background:var(--ac);color:var(--on);font:800 17px var(--disp);cursor:pointer}
-.btn:active{transform:translateY(1px)}.btn.ghost{background:var(--sf2);color:var(--tx)}.btn.hot{background:var(--hc);color:#1a0600}.btn.sm{width:auto;padding:8px 12px;font-size:14px}
-.row{display:flex;gap:10px}.row>*{flex:1;min-width:0}
+button,input{font:inherit;color:inherit}
+.hidden{display:none!important}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:5000;opacity:.09;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+
+/* shared bits */
+.btn{display:block;width:100%;padding:14px 16px;border:0;border-radius:16px 4px 16px 4px;background:var(--ac);color:var(--on);font:800 17px var(--disp);font-variation-settings:'wdth' 100;letter-spacing:.01em;cursor:pointer}
+.btn:active{transform:translateY(1px)}
+.btn.ghost{background:var(--sf2);color:var(--tx)}
+.btn.hot{background:var(--hc);color:#1a0600}
+.btn.sm{width:auto;padding:8px 12px;font-size:14px}
+.row{display:flex;gap:10px;align-items:flex-end}
+.row>*{flex:1;min-width:0}
 .small{font-size:13px;color:var(--mute)}
 label.l{display:block;font-size:13px;color:var(--mute);margin:12px 0 4px}
-input[type=text],input[type=number]{width:100%;padding:8px 0;border:0;border-bottom:2px solid var(--sf2);background:transparent;font:700 22px var(--body);border-radius:0}
-input:focus{outline:none;border-bottom-color:var(--ac)}
+input[type=text],input[type=number]{width:100%;padding:8px 0;border:0;border-bottom:2px solid var(--sf2);border-radius:0;background:transparent;font:700 22px var(--body)}
+input[type=text]:focus,input[type=number]:focus{outline:none;border-bottom-color:var(--ac)}
 input[type=checkbox]{accent-color:var(--ac);width:18px;height:18px;vertical-align:-3px;margin-right:8px}
 .ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;display:block}
-.av{border-radius:50%;overflow:hidden;background:var(--sf2);display:flex;align-items:center;justify-content:center;font:800 16px var(--disp);flex:0 0 auto;--ring:#667;box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ring)}
-.av img{width:100%;height:100%;object-fit:cover}.av.h{--ring:var(--hc)}.av.s{--ring:var(--sc)}
-/* join */
-#join{position:relative;min-height:100dvh;overflow:hidden;background:linear-gradient(112deg,#2a0f06 0 47%,#0d0f13 47% 53%,#06222d 53%)}
-.jin{position:relative;max-width:460px;margin:0 auto;padding:calc(34px + env(safe-area-inset-top)) 22px 40px;display:flex;flex-direction:column;gap:20px}
-.logo{position:relative;margin:0;font:900 clamp(52px,16vw,76px)/.9 var(--disp);font-variation-settings:'wdth' 120;height:1em}
-.logo span{position:absolute;left:0;top:0;white-space:nowrap}
-.logo .e{color:var(--hc);clip-path:polygon(0 -10%,52% -10%,40% 110%,0 110%)}.logo .i{color:var(--sc);clip-path:polygon(52% -10%,110% -10%,110% 110%,40% 110%)}
+.av{border-radius:50%;overflow:hidden;background:var(--sf2);display:flex;align-items:center;justify-content:center;font:800 16px var(--disp);color:var(--tx);flex:0 0 auto;--ring:#667;box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ring)}
+.av img{width:100%;height:100%;object-fit:cover;display:block}
+.av.h{--ring:var(--hc)}.av.s{--ring:var(--sc)}
+
+/* join screen: the two teams meeting on a diagonal */
+#join{position:relative;min-height:100dvh;overflow:hidden;background:linear-gradient(112deg,#2a0f06 0 47%,#0d0f13 47% 53%,#06222d 53% 100%)}
+#join::before{content:'';position:absolute;left:50%;top:-10%;width:2px;height:130%;background:linear-gradient(#0000,#f1f0ec55,#0000);transform:rotate(12deg);transform-origin:center}
+.jin{position:relative;max-width:460px;margin:0 auto;padding:calc(34px + env(safe-area-inset-top)) 22px 40px;display:flex;flex-direction:column;gap:22px}
+.logo{position:relative;margin:0;font:900 clamp(52px,16vw,76px)/.9 var(--disp);font-variation-settings:'wdth' 120,'wght' 900;letter-spacing:-.01em;height:1em}
+.logo .lg{position:absolute;left:0;top:0;white-space:nowrap}
+.logo .e{color:var(--hc);clip-path:polygon(0 -10%,52% -10%,40% 110%,0 110%)}
+.logo .i{color:var(--sc);clip-path:polygon(52% -10%,110% -10%,110% 110%,40% 110%)}
+.tag{margin:0;color:#c8c5bb;font-size:17px;max-width:30ch}
 .well{background:#0d0f13cc;border-radius:22px 6px 22px 6px;padding:18px}
-.pickrow{display:flex;gap:16px;align-items:center}#picPrev{width:76px;height:76px;font-size:30px;--ring:#f1f0ec;cursor:pointer}
+.pickrow{display:flex;gap:16px;align-items:center}
+#picPrev{width:76px;height:76px;font-size:30px;--ring:#f1f0ec;cursor:pointer}
 .pickbtn{display:inline-block;padding:8px 12px;border-radius:12px 3px 12px 3px;background:#272b34;font-weight:700;cursor:pointer}
-.codeIn{font:900 34px var(--disp)!important;letter-spacing:.35em;text-transform:uppercase;text-align:center;padding-left:.35em!important}
+.codeIn{font:900 34px var(--disp)!important;font-variation-settings:'wdth' 125;letter-spacing:.35em;text-transform:uppercase;text-align:center;padding-left:.35em!important}
 #insecure{background:#3a1209;border-left:4px solid var(--hc);color:#ffcdb8;padding:12px 14px;border-radius:4px 14px 4px 14px;font-size:14px}
-#join .btn{background:#f1f0ec;color:#101216}#join .btn.ghost{background:#272b34;color:#f1f0ec}
-/* game */
-#app{position:fixed;inset:0}#map{position:absolute;inset:0;background:var(--bg)}
+#join .btn{background:#f1f0ec;color:#101216}
+#join .btn.ghost{background:#272b34;color:#f1f0ec}
+
+/* in-game: full-bleed map, HUD on top, radio dock below */
+#app{position:fixed;inset:0;background:var(--bg)}
+#map{position:absolute;inset:0;background:var(--bg)}
 body[data-theme] .leaflet-tile-pane{filter:var(--map);transition:filter .9s}
 #veil{position:absolute;left:0;right:0;top:0;height:210px;background:linear-gradient(var(--bg),var(--bg) 18%,#0000);opacity:.92;pointer-events:none;z-index:500}
 #veilB{position:absolute;left:0;right:0;bottom:0;height:170px;background:linear-gradient(#0000,var(--bg));opacity:.9;pointer-events:none;z-index:500}
-#hud{position:absolute;left:0;right:0;top:0;padding:calc(10px + env(safe-area-inset-top)) 12px 0;z-index:600;display:flex;justify-content:space-between;gap:8px;pointer-events:none}
+#hud{position:absolute;left:0;right:0;top:0;padding:calc(10px + env(safe-area-inset-top)) 12px 0;z-index:600;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;pointer-events:none}
 #hud>*{pointer-events:auto}
+#left{min-width:0}
 #roomTag{display:flex;gap:8px;align-items:center;font-weight:700}
-#roomcode{font:900 18px var(--disp);letter-spacing:.14em}
+#roomcode{font:900 18px var(--disp);font-variation-settings:'wdth' 120;letter-spacing:.14em}
 #status{font-size:13px;color:var(--on);background:var(--ac);padding:1px 9px;border-radius:9px 2px 9px 2px;font-weight:700}
 #countlbl{margin-top:8px;font-size:14px;color:var(--mute)}
-#count{font:900 clamp(70px,24vw,118px)/.82 var(--disp);font-variant-numeric:tabular-nums;text-shadow:0 2px 24px var(--bg);font-variation-settings:'wdth' 100}
-#count.urgent{color:var(--ac);animation:sq 1s ease-in-out infinite}
-@keyframes sq{0%,100%{font-variation-settings:'wdth' 75}50%{font-variation-settings:'wdth' 140}}
-#snapNote{margin-top:6px;font-size:13px;font-weight:700;color:var(--ac)}
+#count{font:900 clamp(70px,24vw,118px)/.82 var(--disp);font-variation-settings:'wdth' 100,'wght' 900;font-variant-numeric:tabular-nums;color:var(--tx);text-shadow:0 2px 24px var(--bg);letter-spacing:-.01em}
+#count.urgent{color:var(--ac);animation:squeeze 1s ease-in-out infinite}
+@keyframes squeeze{0%,100%{font-variation-settings:'wdth' 75,'wght' 900}50%{font-variation-settings:'wdth' 140,'wght' 900}}
 #tools{display:flex;flex-direction:column;gap:8px}
 .tool{position:relative;width:42px;height:42px;border:0;border-radius:14px 4px 14px 4px;background:#0009;backdrop-filter:blur(6px);color:var(--tx);display:flex;align-items:center;justify-content:center;cursor:pointer}
 .tool:active{background:var(--ac);color:var(--on)}
 .badge{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:10px 2px 10px 2px;background:var(--hc);color:#1a0600;font:800 12px/20px var(--disp);text-align:center}
 #flash{position:fixed;inset:0;pointer-events:none;z-index:650;opacity:0}
-#flash.go{animation:fl 1.2s ease-out}@keyframes fl{0%{opacity:1;box-shadow:inset 0 0 70px 22px var(--ac)}100%{opacity:0;box-shadow:inset 0 0 180px 70px var(--ac)}}
+#flash.go{animation:flash 1.2s ease-out}
+@keyframes flash{0%{opacity:1;box-shadow:inset 0 0 70px 22px var(--ac)}100%{opacity:0;box-shadow:inset 0 0 180px 70px var(--ac)}}
+
 #dock{position:absolute;left:0;right:0;bottom:0;z-index:800;padding:0 12px calc(12px + env(safe-area-inset-bottom));display:flex;gap:10px}
-#ptt{flex:1;height:80px;border:0;border-radius:26px 6px 26px 6px;background:var(--ac);color:var(--on);display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:pointer}
-#pttTxt{font:900 24px/1 var(--disp)}#pttSub{font-size:13px;font-weight:700;opacity:.75}
-#ptt.live{transform:scale(.985);animation:air 1s ease-out infinite}@keyframes air{0%{box-shadow:0 0 0 0 var(--ac)}100%{box-shadow:0 0 0 22px #0000}}
-#sheetBtn{width:80px;height:80px;border:0;border-radius:6px 26px 6px 26px;background:var(--sf2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer}
+#ptt{flex:1;height:76px;border:0;border-radius:26px 6px 26px 6px;background:var(--ac);color:var(--on);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:pointer;transition:background .15s,transform .1s}
+#pttTxt{font:900 24px/1 var(--disp);font-variation-settings:'wdth' 110,'wght' 900;letter-spacing:.01em}
+#pttSub{font-size:13px;font-weight:700;opacity:.75}
+#ptt.live{background:var(--ac2);transform:scale(.985);animation:onair 1s ease-out infinite}
+@keyframes onair{0%{box-shadow:0 0 0 0 var(--ac)}100%{box-shadow:0 0 0 22px #0000}}
+#sheetBtn{position:relative;width:76px;height:76px;border:0;border-radius:6px 26px 6px 26px;background:var(--sf2);color:var(--tx);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer}
 #sheetBtn span{font:800 13px var(--disp)}
+
 #sheet{position:absolute;left:0;right:0;bottom:var(--dockH);z-index:700;max-height:min(62dvh,calc(100dvh - var(--dockH) - 120px));overflow:auto;background:var(--sf);border-radius:26px 6px 0 0;padding:10px 16px 18px;transform:translateY(calc(100% + var(--dockH)));transition:transform .4s cubic-bezier(.2,.85,.2,1);box-shadow:0 -12px 40px #000a}
-#sheet.open{transform:none}#grab{width:44px;height:5px;border-radius:3px;background:var(--sf2);margin:0 auto 12px}
+#sheet.open{transform:none}
+#grab{width:44px;height:5px;border-radius:3px;background:var(--sf2);margin:0 auto 12px}
 #teambar{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:18px 4px 18px 4px;background:var(--sf2)}
-#teamTxt{flex:1;font:900 20px/1.1 var(--disp)}
-#rule{margin:10px 0 4px;color:var(--mute);font-size:14px}
-#actions{display:flex;gap:8px;margin-top:12px}#actions .btn{margin:0}
-#gal{display:flex;gap:8px;overflow:auto;margin-top:12px}
-#gal img{height:78px;border-radius:10px 3px 10px 3px;border:2px solid var(--ac);cursor:pointer}
+#teambar .nmb{flex:1;font:900 20px/1.1 var(--disp);font-variation-settings:'wdth' 105}
+#rule{margin:10px 0 4px;color:var(--mute);font-size:14px;max-width:60ch}
+#actions{display:flex;gap:8px;margin-top:12px}
+#actions .btn{margin:0}
 #players{list-style:none;margin:14px 0 0;padding:0}
 #players li{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--sf2)}
-#players .who{flex:1;min-width:0}#players .nm2{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#players li.off{opacity:.4}#players li.tap{cursor:pointer}
+#players li .who{flex:1;min-width:0}
+#players li .nm2{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#players li .sub2{font-size:13px;color:var(--mute)}
+#players li.off{opacity:.4}
+#players li.tap{cursor:pointer}
 .tg{font-weight:800;font-size:13px}.tg.h{color:var(--hc)}.tg.s{color:var(--sc)}
+
 #toast{position:fixed;left:50%;bottom:calc(var(--dockH) + 12px);transform:translateX(-50%);z-index:4000;background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:14px 4px 14px 4px;max-width:calc(100vw - 24px);font-weight:700;text-align:center;box-shadow:0 8px 30px #0008}
-.pin{display:flex;flex-direction:column;align-items:center;width:110px;pointer-events:none}
-.tape{padding:2px 10px;margin-bottom:4px;font:800 12px/1.25 var(--body);color:#1a0f08;white-space:nowrap;max-width:104px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 2px 0 #0004;border-radius:3px}
+
+/* map markers: name on a strip of tape, picture below */
+.pin,.pinc{display:flex;flex-direction:column;align-items:center;pointer-events:none}
+.pin{width:120px}
+.tape{position:relative;padding:2px 10px;margin-bottom:4px;font:800 12px/1.25 var(--body);color:#1a0f08;white-space:nowrap;max-width:112px;overflow:hidden;text-overflow:ellipsis;transform:rotate(var(--rot,0deg));clip-path:polygon(0 0,100% 0,98% 28%,100% 52%,98% 76%,100% 100%,0 100%,2% 76%,0 52%,2% 28%);box-shadow:0 2px 0 #0004}
 .tape.th{background:#ff9a52}.tape.ts{background:#9de3ff}
-.tm{margin-top:3px;font-size:11px;font-weight:700;color:#fff;background:#000b;padding:0 7px;border-radius:7px 2px 7px 2px}
-.av.self{animation:self 2s ease-out infinite}@keyframes self{0%{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ring),0 0 0 4px #fff8}100%{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ring),0 0 0 22px #fff0}}
-.crow{display:flex;gap:8px;justify-content:center}.ccol{display:flex;flex-direction:column;align-items:center;width:62px}
-.rad{margin-top:6px;padding:3px 10px;border-radius:10px 3px 10px 3px;background:#1a0600e6;color:#ffb089;font-size:12px;font-weight:700;text-align:center;white-space:nowrap}
-.rad b{display:block;color:#fff;font:800 13px var(--disp)}.rad.dim{background:#000a}
-.area-ring{stroke-dasharray:12 9;animation:march 14s linear infinite}@keyframes march{to{stroke-dashoffset:-210}}
-.leaflet-container{font-family:var(--body);background:var(--bg)}.leaflet-bottom{margin-bottom:calc(var(--dockH) + 4px)}
-.leaflet-bar a{background:var(--sf);color:var(--tx);border-bottom-color:var(--sf2)}
-.leaflet-control-attribution{background:#000a!important;color:#aab!important;font-size:10px}.leaflet-control-attribution a{color:#cde!important}
+.tm{margin-top:3px;font-size:11px;font-weight:700;color:#fff;background:#000b;padding:0 7px;border-radius:7px 2px 7px 2px;white-space:nowrap}
+.av.self{animation:self 2s ease-out infinite}
+@keyframes self{0%{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ring),0 0 0 4px #fff8}100%{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ring),0 0 0 22px #fff0}}
+.crow{display:flex;gap:8px;justify-content:center}
+.ccol{display:flex;flex-direction:column;align-items:center;width:62px}
+.ccol .tape{max-width:62px}
+.rad{margin-top:6px;padding:3px 10px;border-radius:10px 3px 10px 3px;background:#1a0600e6;color:#ffb089;font-size:12px;font-weight:700;text-align:center;line-height:1.25;white-space:nowrap}
+.rad b{display:block;color:#fff;font:800 13px var(--disp)}
+.rad.dim{background:#000a;color:#ffb089}
+.area-ring{stroke-dasharray:12 9;animation:march 14s linear infinite}
+@keyframes march{to{stroke-dashoffset:-210}}
+.leaflet-container{font-family:var(--body);background:var(--bg)}
+.leaflet-bottom{margin-bottom:calc(var(--dockH) + 4px)}
+.leaflet-bar a,.leaflet-bar a:hover{background:var(--sf);color:var(--tx);border-bottom-color:var(--sf2)}
+.leaflet-control-attribution{background:#000a!important;color:#aab!important;font-size:10px}
+.leaflet-control-attribution a{color:#cde!important}
+
 /* chat */
 #chat{position:fixed;left:0;right:0;bottom:0;height:66dvh;background:var(--sf);border-radius:26px 6px 0 0;z-index:3500;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -14px 40px #000b}
 #chatHead{display:flex;gap:8px;padding:12px 12px 8px;align-items:center}
 .tab{flex:1;position:relative;padding:10px;border:0;border-radius:14px 3px 14px 3px;background:var(--sf2);color:var(--mute);font:800 15px var(--disp);cursor:pointer}
-.tab.on{color:#1a0600;background:var(--tx)}.tab.h.on{background:var(--hc)}.tab.s.on{background:var(--sc);color:#031219}
-.dotu{position:absolute;top:6px;right:8px;width:9px;height:9px;border-radius:50%;background:var(--hc)}
+.tab.on{color:#1a0600;background:var(--tx)}
+.tab.h.on{background:var(--hc)}.tab.s.on{background:var(--sc);color:#031219}
+.dotu{position:absolute;top:6px;right:8px;width:9px;height:9px;border-radius:50%;background:var(--hc);box-shadow:0 0 0 2px var(--sf)}
 #chatList{flex:1;overflow:auto;padding:8px 14px;display:flex;flex-direction:column;gap:10px}
-.msg{display:flex;gap:10px}.msg.mine{flex-direction:row-reverse}
+.msg{display:flex;gap:10px;align-items:flex-start}
+.msg.mine{flex-direction:row-reverse}
 .msg .b{background:var(--sf2);border-radius:14px 14px 14px 3px;padding:6px 12px;max-width:78%;word-break:break-word}
 .msg.mine .b{background:var(--ac);color:var(--on);border-radius:14px 14px 3px 14px}
-.msg .who{font-size:12px;font-weight:800}.msg .who.h{color:var(--hc)}.msg .who.s{color:var(--sc)}.msg.mine .who{color:var(--on);opacity:.7}
+.msg .who{font-size:12px;font-weight:800}
+.msg .who.h{color:var(--hc)}.msg .who.s{color:var(--sc)}
+.msg.mine .who{color:var(--on);opacity:.7}
 .empty{color:var(--mute);text-align:center;margin-top:36px}
-#chatForm{display:flex;gap:10px;padding:8px 12px 12px;align-items:flex-end}#chatForm input{flex:1;font-size:18px}#chatForm .btn{width:auto}
-/* photo intel */
-#photo{position:fixed;inset:0;z-index:3800;background:#000d;display:flex;align-items:center;justify-content:center;padding:18px}
-#pcard{width:100%;max-width:420px;background:var(--sf);border-radius:26px 6px 26px 6px;padding:14px;box-shadow:0 0 0 2px var(--hc),0 20px 60px #000;animation:pop .35s cubic-bezier(.2,1.3,.4,1)}
-@keyframes pop{from{transform:scale(.7) rotate(-3deg);opacity:0}}
-#pHead{display:flex;align-items:center;gap:12px;margin-bottom:10px}
-#pName{font:900 26px/1 var(--disp);color:var(--hc)}#pMeta{font-size:13px;color:var(--mute)}
-#pImg{width:100%;border-radius:14px 4px 14px 4px;display:block;background:#000;min-height:120px}
-.stamp{margin-bottom:6px;font:800 12px var(--disp);letter-spacing:.2em;color:var(--hc)}
-/* reveal */
+#chatForm{display:flex;gap:10px;padding:8px 12px 12px;align-items:flex-end}
+#chatForm input{flex:1;font-size:18px}
+#chatForm .btn{width:auto}
+
+/* role reveal: the one big moment */
 #reveal{position:fixed;inset:0;z-index:3000;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;cursor:pointer;background:var(--rbg);color:var(--rfg);clip-path:circle(0% at 50% 58%)}
-#reveal[data-t=hider]{--rbg:#ff5b1f;--rfg:#1a0600}#reveal[data-t=seeker]{--rbg:#4cc9ff;--rfg:#031219}
+#reveal[data-t=hider]{--rbg:#ff5b1f;--rfg:#1a0600}
+#reveal[data-t=seeker]{--rbg:#4cc9ff;--rfg:#031219}
 #reveal::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(135deg,#0000 0 26px,#0000001c 26px 52px)}
-#reveal.show{animation:iris .75s cubic-bezier(.7,0,.2,1) forwards}#reveal.fade{opacity:0;transition:opacity .55s}
+#reveal.show{animation:iris .75s cubic-bezier(.7,0,.2,1) forwards}
+#reveal.fade{opacity:0;transition:opacity .55s}
 @keyframes iris{to{clip-path:circle(150% at 50% 58%)}}
-#rvWord{position:relative;font:900 clamp(90px,27vw,200px)/.85 var(--disp);animation:wd 1.2s cubic-bezier(.2,.9,.2,1) .25s both}
-@keyframes wd{from{font-variation-settings:'wdth' 50;opacity:0}to{font-variation-settings:'wdth' 150;opacity:1}}
-#rvSub{position:relative;margin-top:22px;font-size:19px;font-weight:700;max-width:26ch}
-#snapV{position:fixed;width:2px;height:2px;opacity:.01;pointer-events:none;left:0;top:0}
-@media (prefers-reduced-motion:reduce){*,*::before{animation:none!important;transition:none!important}#reveal.show{clip-path:none}}
-</style></head>
+#rvWord{position:relative;font:900 clamp(90px,27vw,200px)/.85 var(--disp);font-variation-settings:'wdth' 150,'wght' 900;animation:widen 1.2s cubic-bezier(.2,.9,.2,1) .25s both}
+@keyframes widen{from{font-variation-settings:'wdth' 50,'wght' 900;opacity:0}to{font-variation-settings:'wdth' 150,'wght' 900;opacity:1}}
+#rvSub{position:relative;margin-top:22px;font-size:19px;font-weight:700;max-width:26ch;animation:rise .6s ease .9s both}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* cameras + recording */
+#cam{position:fixed;left:0;right:0;bottom:0;height:80dvh;background:var(--sf);border-radius:26px 6px 0 0;z-index:3600;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -14px 40px #000b}
+#camHead{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 8px;font:900 18px var(--disp)}
+#camBody{flex:1;overflow:auto;padding:4px 16px 18px}
+.camsec{background:var(--sf2);border-radius:18px 4px 18px 4px;padding:14px}
+.seg{display:flex;gap:6px;margin:8px 0 4px}
+.seg button{flex:1;padding:9px 4px;border:0;border-radius:12px 3px 12px 3px;background:var(--sf);color:var(--mute);font:800 13px var(--disp);cursor:pointer}
+.seg button.on{background:var(--ac);color:var(--on)}
+.row2{display:flex;gap:8px}.row2 .btn{margin:0}
+#camSelf,.camtile video{display:block;width:100%;max-height:42dvh;margin-top:10px;border-radius:14px 4px 14px 4px;background:#000;object-fit:cover}
+#camSelf.mirror{transform:scaleX(-1)}
+.camtile{margin-top:14px;padding:10px;border-radius:18px 4px 18px 4px;background:var(--sf2)}
+.camtile .ct{display:flex;align-items:center;gap:8px;font-weight:800}
+.camtile .ct .dot{width:10px;height:10px;border-radius:50%;background:var(--hc);animation:onair 1.4s ease-out infinite}
+.camtile .ct .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.camtile .cr{display:flex;gap:8px;margin-top:8px}
+.camtile .cr .btn{margin:0;flex:1}
+.rec{display:flex;gap:8px;align-items:center;margin-top:10px;padding:8px 10px;border-radius:12px 3px 12px 3px;background:var(--sf2)}
+.rec .rn{flex:1;min-width:0;font-size:12px;color:var(--mute);word-break:break-all}
+a.btn{text-decoration:none;display:inline-block;text-align:center}
+.btn.recording{background:var(--hc);color:#1a0600}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before{animation:none!important;transition:none!important}
+  #reveal.show{clip-path:none}
+  #ptt.live{background:var(--ac2)}
+}
+</style>
+</head>
 <body data-theme="neutral">
 
-<section id="join"><div class="jin">
-  <h1 class="logo" aria-label="Manhunt"><span class="e" aria-hidden="true">MANHUNT</span><span class="i" aria-hidden="true">MANHUNT</span></h1>
-  <p class="small" style="font-size:17px;color:#c8c5bb">Live hide and seek. Hiders get radar circles and spy photos. Seekers hunt.</p>
-  <div id="insecure" class="hidden"><b>Location, mic and camera are blocked here.</b> Browsers only allow them over https. Upload this file to Netlify Drop, GitHub Pages or Cloudflare Pages and open that link on every phone.</div>
-  <div class="well">
-    <div class="pickrow"><div class="av" id="picPrev"></div><div><label class="pickbtn">Add photo<input type="file" id="picIn" accept="image/*" hidden></label><div class="small" style="margin-top:6px">Your avatar. Stays on this phone.</div></div></div>
-    <label class="l" for="name">Your name</label><input type="text" id="name" maxlength="16" placeholder="Jake" autocomplete="off">
+<section id="join">
+  <div class="jin">
+    <h1 class="logo" aria-label="Manhunt"><span class="lg e" aria-hidden="true">MANHUNT</span><span class="lg i" aria-hidden="true">MANHUNT</span></h1>
+    <p class="tag">Hide-and-seek on a live map, with a team radio and a chat.</p>
+    <div id="insecure" class="hidden"><b>Location and mic are blocked on this page.</b> Browsers only allow them over https. Upload this file to Netlify Drop, GitHub Pages or Cloudflare Pages and open that link on every phone.</div>
+    <div class="well">
+      <div class="pickrow">
+        <div class="av" id="picPrev"></div>
+        <div>
+          <label class="pickbtn">Add photo<input type="file" id="picIn" accept="image/*" hidden></label>
+          <div class="small" style="margin-top:6px">Stays on this phone.</div>
+        </div>
+      </div>
+      <label class="l" for="name">Your name</label>
+      <input type="text" id="name" maxlength="16" placeholder="Jake" autocomplete="off">
+    </div>
+    <button class="btn" id="create">Host a game</button>
+    <div class="well">
+      <label class="l" for="code" style="margin-top:0">Got a room code?</label>
+      <input type="text" id="code" class="codeIn" maxlength="4" placeholder="ABCD" autocomplete="off">
+      <button class="btn ghost" id="joinbtn" style="margin-top:14px">Join game</button>
+    </div>
+    <p class="small">During a game your live position goes to your own team only, and you can switch that off. Seekers never get exact spots for hiders, just a 0.2 mile circle at each ping. The mic opens only while you hold the radio button.</p>
+    <p class="small"><b>Tip:</b> allow notifications when asked, and keep the Manhunt tab open (just switch apps or lock the screen, don't swipe it away). Sounds, the countdown and pings keep going while it's in the background.</p>
   </div>
-  <button class="btn" id="create">Host a game</button>
-  <div class="well"><label class="l" for="code" style="margin-top:0">Got a room code?</label>
-    <input type="text" id="code" class="codeIn" maxlength="4" placeholder="ABCD" autocomplete="off">
-    <button class="btn ghost" id="joinbtn" style="margin-top:14px">Join game</button></div>
-  <p class="small"><b>How it works.</b> Hiders see every seeker live. Seekers only see a rough 0.2 mile circle around hiders each ping. One minute after each ping, every hider’s camera takes a photo that goes to the seekers with the hider’s name. Hiders: allow the camera when asked.</p>
-  <p class="small"><b>Background.</b> Keep the Manhunt tab open and switch apps or lock the screen. Do not swipe it away. A closed page cannot run, no browser allows that.</p>
-</div></section>
+</section>
 
 <div id="app" class="hidden">
-  <div id="map"></div><div id="veil"></div><div id="veilB"></div><div id="flash"></div>
+  <div id="map"></div>
+  <div id="veil"></div><div id="veilB"></div>
+  <div id="flash"></div>
+
   <header id="hud">
-    <div>
+    <div id="left">
       <div id="roomTag"><span id="roomcode"></span><span id="status"></span></div>
-      <div id="countlbl">Waiting to start</div><div id="count">--:--</div><div id="snapNote" class="hidden"></div>
+      <div id="countlbl">Waiting to start</div>
+      <div id="count">--:--</div>
     </div>
     <div id="tools">
       <button class="tool" id="chatBtn" aria-label="Chat"><svg class="ic" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span id="chatBadge" class="badge hidden">0</span></button>
-      <button class="tool" id="share" aria-label="Share invite"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5M5 14v6h14v-6"/></svg></button>
-      <button class="tool" id="fit" aria-label="Fit map"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
-      <button class="tool" id="locme" aria-label="Where am I"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
+      <button class="tool" id="camBtn" aria-label="Cameras and recording"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7h12v10H3zM15 11l6-3v8l-6-3"/></svg><span id="camBadge" class="badge hidden">0</span></button>
+      <button class="tool" id="share" aria-label="Share invite link"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5M5 14v6h14v-6"/></svg></button>
+      <button class="tool" id="fit" aria-label="Fit map to everyone"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button class="tool" id="locme" aria-label="Show where I am"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
     </div>
   </header>
+
   <div id="sheet">
     <div id="grab"></div>
-    <div id="teambar"><div class="av" id="meAv" style="width:40px;height:40px"></div><div id="teamTxt"></div><label class="btn ghost sm" style="cursor:pointer;margin:0">Photo<input type="file" id="picIn2" accept="image/*" hidden></label></div>
+    <div id="teambar">
+      <div class="av" id="meAv" style="width:40px;height:40px"></div>
+      <div class="nmb" id="teamTxt"></div>
+      <label class="btn ghost sm" style="cursor:pointer;margin:0">Photo<input type="file" id="picIn2" accept="image/*" hidden></label>
+    </div>
     <div id="rule"></div>
-    <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="liveToggle" checked>Share my live location (hiders see seekers, teams see teammates)</label>
-    <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="soundToggle" checked>Game sounds</label>
+    <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="liveToggle" checked>Share my live location with my team during the game</label>
+    <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="soundToggle" checked>Game sounds (ping, countdown, chat, role)</label>
+
     <div id="lobbyBox">
-      <div class="row" style="margin-top:6px"><button class="btn ghost" id="testLoc">Test location</button><button class="btn ghost" id="testSnd">Test sounds</button></div>
+      <button class="btn ghost" id="testLoc" style="margin-top:6px">Test my location</button>
       <div class="small" id="geoStatus" style="margin-top:6px"></div>
+      <button class="btn ghost" id="testSnd" style="margin-top:6px">Test sounds</button>
       <div id="hostSettings" class="hidden">
         <div class="row" style="margin-top:6px">
           <div><label class="l">Seekers</label><input type="number" id="seekN" value="1" min="0" max="20"></div>
-          <div><label class="l">Hide min</label><input type="number" id="hideMin" value="5" min="0" max="120"></div>
-          <div><label class="l">Ping every</label><input type="number" id="pingMin" value="2" min="1" max="60"></div>
+          <div><label class="l">Hide minutes</label><input type="number" id="hideMin" value="10" min="0" max="120"></div>
+          <div><label class="l">Ping every</label><input type="number" id="pingMin" value="5" min="1" max="60"></div>
         </div>
-        <div style="display:flex;gap:8px;margin-top:14px"><button class="btn ghost" id="rand">Randomize</button><button class="btn" id="start">Start game</button></div>
-        <div class="small" style="margin-top:8px">Tap a player below to flip their team.</div>
+        <div id="actions0" style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn ghost" id="rand">Randomize teams</button>
+          <button class="btn" id="start">Start game</button>
+        </div>
+        <div class="small" style="margin-top:8px">Tap a player below to flip their team by hand.</div>
       </div>
-      <div id="guestWait" class="small" style="margin-top:12px">Waiting for the host to start.</div>
+      <div id="guestWait" class="small" style="margin-top:12px">Waiting for the host to pick teams and start.</div>
     </div>
-    <div id="actions"><button class="btn ghost hidden" id="pingNow">Ping now</button><button class="btn hot hidden" id="end">End game</button><button class="btn hidden" id="again">New round</button></div>
-    <div id="galWrap" class="hidden"><div class="small" style="margin-top:14px">Hider photos (tap to open)</div><div id="gal"></div></div>
+
+    <div id="actions">
+      <button class="btn ghost hidden" id="pingNow">Ping now</button>
+      <button class="btn hot hidden" id="end">End game</button>
+      <button class="btn hidden" id="again">New round</button>
+    </div>
     <div class="small" id="micnote" style="margin-top:8px"></div>
     <ul id="players"></ul>
   </div>
+
   <div id="dock">
     <button id="ptt"><span id="pttTxt">Hold to talk</span><span id="pttSub">Team radio</span></button>
-    <button id="sheetBtn" aria-label="Players and controls"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6M17 5a3 3 0 010 6M19 14c1.7.7 2.8 2.4 3 5"/></svg><span id="sheetCount">1</span></button>
+    <button id="sheetBtn" aria-label="Players and game controls"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6M17 5a3 3 0 010 6M19 14c1.7.7 2.8 2.4 3 5"/></svg><span id="sheetCount">1</span></button>
   </div>
 </div>
 
 <div id="chat" class="hidden">
-  <div id="chatHead"><button class="tab" id="tabTeam"><span id="tabTeamTxt">Team</span><i id="dotTeam" class="dotu hidden"></i></button><button class="tab" id="tabAll"><span>Everyone</span><i id="dotAll" class="dotu hidden"></i></button><button class="btn ghost sm" id="chatClose">Close</button></div>
+  <div id="chatHead">
+    <button class="tab" id="tabTeam"><span id="tabTeamTxt">Team</span><i id="dotTeam" class="dotu hidden"></i></button>
+    <button class="tab all" id="tabAll"><span>Everyone</span><i id="dotAll" class="dotu hidden"></i></button>
+    <button class="btn ghost sm" id="chatClose" aria-label="Close chat">Close</button>
+  </div>
   <div id="chatList"></div>
   <form id="chatForm"><input type="text" id="chatIn" maxlength="200" placeholder="Message" autocomplete="off"><button class="btn sm" type="submit">Send</button></form>
 </div>
-<div id="photo" class="hidden"><div id="pcard"><div class="stamp">INTEL // HIDER SPOTTED</div>
-  <div id="pHead"><div id="pAv"></div><div style="flex:1"><div id="pName"></div><div id="pMeta"></div></div></div>
-  <img id="pImg" alt="Photo from hider"><button class="btn hot" id="pClose" style="margin-top:12px">Got it</button></div></div>
+
+<div id="cam" class="hidden">
+  <div id="camHead"><b>Cameras &amp; recording</b><button class="btn ghost sm" id="camClose" aria-label="Close cameras">Close</button></div>
+  <div id="camBody">
+    <div class="camsec">
+      <div class="small">Show my camera to</div>
+      <div id="aud" class="seg"><button data-a="none">Nobody</button><button data-a="seeker">Seekers</button><button data-a="hider">Hiders</button><button data-a="all">Everyone</button></div>
+      <label class="small" style="display:block;margin:10px 0 8px"><input type="checkbox" id="camSound" checked>Include my sound</label>
+      <div class="row2"><button class="btn" id="camToggle">Start camera</button><button class="btn ghost hidden" id="camFlip">Flip</button></div>
+      <video id="camSelf" class="hidden" playsinline muted autoplay></video>
+      <div class="row2" style="margin-top:8px"><button class="btn ghost hidden" id="recSelf">Record my camera</button><button class="btn ghost hidden" id="recScreen">Record screen</button></div>
+      <div class="small" id="recHint" style="margin-top:6px">Nobody means only you see it, which is handy for just recording. Phones can't record the whole screen from a website; use your phone's built-in screen recorder for that.</div>
+    </div>
+    <label class="small" style="display:block;margin:12px 0"><input type="checkbox" id="camAllow" checked>Let other players show me their camera</label>
+    <div id="camIn"></div>
+    <div id="recs"></div>
+  </div>
+</div>
+
 <div id="reveal" class="hidden"><div id="rvWord"></div><div id="rvSub"></div></div>
-<div id="toast" class="hidden"></div><div id="audios"></div><video id="snapV" playsinline muted autoplay></video>
+<div id="toast" class="hidden"></div>
+<div id="audios"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
-const RAD=321.87, FUZZ=160, STILL=100, HC='#ff5b1f', SC='#4cc9ff';
-const $=id=>document.getElementById(id);
-const me={id:null,name:'',team:'hider',isHost:false,code:'',pic:null};
-let peer,hostConn=null,localStream=null,snapStream=null,state=null,skew=0,entered=false,lastPingN=null,first=true,prevStatus=null,sheetOpen=false;
-let liveStore={},live={},conns={},calls={},audioEls={},photos=[],chatLog=[],chatMsgs=[];
-let watchId=null,lastFix=null,lastSent=0,watchErr=false,resumed=false,reconBusy=false,fitted=false,map,layerP,layerL,meMarker;
-const store={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
-const uid=(()=>{let u=store.get('mh_uid');if(!u){u=Math.random().toString(36).slice(2,10);store.set('mh_uid',u)}return u})();
-const secureOk=window.isSecureContext&&location.protocol!=='file:'; if(!secureOk)$('insecure').classList.remove('hidden');
+// Reserved for a future Unity/PUN2 build. Browsers can't use Photon Voice, so this site uses WebRTC (PeerJS).
+const CFG = { photonPunAppId:'e311f009-c6be-433f-bda5-ee47fe131d88', photonVoiceAppId:'03e1ff28-3112-4a10-a254-8230478e742e' };
+const RADIUS_M = 321.87;      // 0.2 mile — the area seekers see for each hider
+const FUZZ_M = 160;           // true spot is somewhere inside the circle, not at its center
+const STILL_M = 100;          // moved less than this since last ping = same circle
+const HC = '#ff5b1f', SC = '#4cc9ff';
 
-function toast(m,ms=3500){const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.add('hidden'),ms)}
-const fmt=ms=>{ms=Math.max(0,Math.ceil(ms/1000));return String(Math.floor(ms/60)).padStart(2,'0')+':'+String(ms%60).padStart(2,'0')};
-const ago=ts=>{const s=Math.max(0,Math.round((Date.now()+skew-ts)/1000));return s<60?s+'s ago':Math.round(s/60)+' min ago'};
-async function getMic(){try{localStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});localStream.getAudioTracks().forEach(t=>t.enabled=false)}catch(e){localStream=new MediaStream();$('micnote').textContent='Mic unavailable. You can listen but not talk.'}}
+const $ = id => document.getElementById(id);
+const me = { id:null, name:'', team:'hider', isHost:false, code:'', pic:null };
+let peer, lobbyPeer, hostConn = null, localStream = null, state = null, skew = 0;
+let lastPingN = null, firstState = true, entered = false, migrating = false, tickHost = null;
+let liveStore = {};           // host only: latest live fix for everyone
+let live = {};                // what this device may see: live fixes of my own team
+let watchId = null, lastFix = null, lastSent = 0, watchErrShown = false;
+let prevStatus = null, sheetOpen = false;
+const seenAreas = new Set();
+const conns = {}, calls = {}, audioEls = {};
+let map, layerPings, layerLive, meMarker, fitted = false;
+const store = { get:k=>{ try{return localStorage.getItem(k)}catch(e){return null} }, set:(k,v)=>{ try{localStorage.setItem(k,v)}catch(e){} } };
+// a permanent id for this phone, so rejoining is recognised as the SAME player instead of creating a duplicate
+const uid = (() => { let u = store.get('mh_uid'); if(!u){ u = Math.random().toString(36).slice(2,10); store.set('mh_uid', u); } return u; })();
+let resumed = false, reconUntil = 0, reconBusy = false, reconTimer = null, recreating = false;
 
-/* ===== SOUND ENGINE: compressor + generated reverb, layered synth voices ===== */
-let A=null,master,keepEl=null,sched=[],schedKey=null,schedPingAt=0;
-const sndOn=()=>$('soundToggle').checked;
-function audio(){
+// ---------- helpers ----------
+function toast(msg, ms=3500){ const t=$('toast'); t.textContent=msg; t.classList.remove('hidden'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.add('hidden'),ms); }
+function fmt(ms){ ms=Math.max(0,Math.ceil(ms/1000)); const m=Math.floor(ms/60), s=ms%60; return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
+function ago(ts){ const s=Math.max(0,Math.round((Date.now()+skew-ts)/1000)); return s<60 ? s+'s ago' : Math.round(s/60)+' min ago'; }
+async function getMic(){
   try{
-    if(!A){A=new(window.AudioContext||window.webkitAudioContext)();master=A.createGain();master.gain.value=.85;
-      const comp=A.createDynamicsCompressor(),verb=A.createConvolver(),wet=A.createGain();wet.gain.value=.4;
-      const n=A.sampleRate*2|0,b=A.createBuffer(2,n,A.sampleRate);
-      for(let c=0;c<2;c++){const d=b.getChannelData(c);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,3)}
-      verb.buffer=b;master.connect(comp);master.connect(verb);verb.connect(wet);wet.connect(comp);comp.connect(A.destination)}
-    if(A.state!=='running')A.resume();
+    localStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    localStream.getAudioTracks().forEach(t=>t.enabled=false);
+  }catch(e){
+    localStream = new MediaStream();
+    $('micnote').textContent='Mic unavailable. You can listen but not talk. Allow microphone access and rejoin.';
+  }
+}
+
+// ---------- sounds + background keep-alive ----------
+// A web page can't run once it's closed or the phone is off. What it CAN do is keep running while it's
+// backgrounded or the screen is locked, as long as it's still open. To make that work we:
+//   1) hold a screen wake lock while the game runs,
+//   2) loop a silent <audio> track so the browser treats the tab as "playing media" and doesn't freeze it,
+//   3) schedule the countdown beeps ON THE AUDIO CLOCK, so they fire on time even if timers get throttled,
+//   4) show a system notification for pings / chat / role when the tab is hidden.
+let actx = null, keepEl = null, sched = [], schedKey = null, schedPingAt = 0, lastNotifAt = 0;
+const sndOn = () => $('soundToggle').checked;
+
+function silentWavUrl(){
+  const n = 8000, b = new ArrayBuffer(44+n), v = new DataView(b);
+  const w = (o,s) => { for(let i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); };
+  w(0,'RIFF'); v.setUint32(4,36+n,true); w(8,'WAVEfmt '); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,8000,true); v.setUint32(28,8000,true); v.setUint16(32,1,true); v.setUint16(34,8,true); w(36,'data'); v.setUint32(40,n,true);
+  new Uint8Array(b,44).fill(128);
+  return URL.createObjectURL(new Blob([b],{type:'audio/wav'}));
+}
+function startKeepAlive(){
+  try{
+    if(!keepEl){
+      keepEl = new Audio(silentWavUrl()); keepEl.loop = true; keepEl.volume = 0.01; keepEl.setAttribute('playsinline','');
+      keepEl.addEventListener('pause', () => { if(entered && !keepEl._stop) keepEl.play().catch(()=>{}); });
+    }
+    keepEl.play().catch(()=>{});
+    if('mediaSession' in navigator){
+      navigator.mediaSession.metadata = new MediaMetadata({ title:'Manhunt is live', artist:'Game in progress' });
+      navigator.mediaSession.playbackState = 'playing';
+      ['play','pause','stop'].forEach(a => { try{ navigator.mediaSession.setActionHandler(a, () => { keepEl && keepEl.play().catch(()=>{}); }); }catch(e){} });
+    }
   }catch(e){}
-  keepAlive();
 }
-function tone(t,f0,f1,d,v,ty,det){const o=A.createOscillator(),g=A.createGain();o.type=ty||'sine';o.detune.value=det||0;o.frequency.setValueAtTime(f0,t);
-  if(f1&&f1!==f0)o.frequency.exponentialRampToValueAtTime(f1,t+d);
-  g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+.012);g.gain.exponentialRampToValueAtTime(.0001,t+d);
-  o.connect(g);g.connect(master);o.start(t);o.stop(t+d+.05);return o}
-function noise(t,d,v,f,q){const n=A.sampleRate*d|0,b=A.createBuffer(1,n,A.sampleRate),x=b.getChannelData(0);
-  for(let i=0;i<n;i++)x[i]=(Math.random()*2-1)*(1-i/n);
-  const s=A.createBufferSource(),fl=A.createBiquadFilter(),g=A.createGain();s.buffer=b;fl.type='bandpass';fl.frequency.value=f;fl.Q.value=q||1;g.gain.value=v;
-  s.connect(fl);fl.connect(g);g.connect(master);s.start(t);return s}
-const SND={
-  ping:t=>[tone(t,1320,1300,1.6,.45),tone(t,1328,1320,1.6,.25),tone(t+.32,880,870,1.3,.28),tone(t,80,40,.6,.8),noise(t,.25,.3,2500,2)],
-  snap:t=>[noise(t,.05,.9,3200,.8),noise(t+.08,.07,.7,1800,.8),...[523,659,784,1047].map((f,i)=>tone(t+.22+i*.07,f,f,.35,.22,'triangle'))],
-  chat:t=>[tone(t,1175,1175,.12,.25),tone(t+.09,1568,1568,.2,.22)],
-  tick:(t,last)=>[tone(t,last?1760:1040,last?1760:1040,last?.6:.07,last?.5:.3,'triangle'),noise(t,.02,.4,4000,1)],
-  hide:t=>[tone(t,45,38,1.8,.9),tone(t,110,55,1.4,.3,'sawtooth',-12),tone(t+.02,110,55,1.4,.3,'sawtooth',12),tone(t+1.1,220,220,.7,.25,'triangle'),noise(t,1.2,.2,300,.7)],
-  seek:t=>[tone(t,200,1400,.9,.3,'sawtooth'),tone(t+.9,1400,500,.5,.2,'sawtooth'),...[523,659,784].map(f=>tone(t+1.3,f,f,1.1,.2,'triangle')),noise(t,.9,.15,2000,.6)],
-  over:t=>[784,659,523,392].map((f,i)=>tone(t+i*.2,f,f,.7,.3,'triangle'))
+function unlockAudio(){
+  try{
+    if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state !== 'running') actx.resume();
+  }catch(e){}
+  startKeepAlive();
+}
+function askNotify(){ try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(e){} }
+function notify(title, body, tag){
+  if(!document.hidden) return;
+  try{ if('Notification' in window && Notification.permission==='granted'){ new Notification(title,{body, tag:tag||'manhunt', renotify:true}); } }catch(e){}
+}
+// one note: oscillator + quick envelope, scheduled at audio-clock time t0
+function tone(t0, f0, f1, dur, vol, type){
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type||'sine'; o.frequency.setValueAtTime(f0, t0);
+  if(f1 && f1!==f0) o.frequency.exponentialRampToValueAtTime(f1, t0+dur);
+  g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0+.012); g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+  o.connect(g); g.connect(actx.destination); o.start(t0); o.stop(t0+dur+.03);
+  return o;
+}
+const SND = {
+  // ping: bright three-note rising alert
+  ping(at){ const t=at; return [tone(t,660,990,.2,.5,'triangle'), tone(t+.2,880,1320,.2,.5,'triangle'), tone(t+.42,1175,1175,.45,.5,'triangle')]; },
+  // chat: soft two-note blip
+  chat(at){ const t=at; return [tone(t,880,880,.09,.3,'sine'), tone(t+.1,1320,1320,.14,.3,'sine')]; },
+  // countdown: short tick; last==true is the long final beep
+  tick(at,last){ return [tone(at, last?1320:880, last?1320:880, last?.5:.11, last?.55:.35, 'square')]; },
+  // role reveals
+  hide(at){ const t=at; return [tone(t,110,55,.9,.6,'sawtooth'), tone(t+.05,220,110,.9,.25,'square'), tone(t+.9,330,330,.35,.35,'triangle')]; },
+  seek(at){ const t=at; return [tone(t,300,1200,.7,.45,'sawtooth'), tone(t+.7,1200,300,.7,.35,'sawtooth'), tone(t+1.4,880,880,.35,.4,'triangle')]; }
 };
-function play(n,...a){if(!sndOn())return;try{audio();if(A)SND[n](A.currentTime+.02,...a)}catch(e){}}
+function play(name, ...a){
+  if(!sndOn()) return;
+  try{ unlockAudio(); if(actx) SND[name](actx.currentTime+.02, ...a); }catch(e){}
+}
+// Pre-schedule the final-10-seconds ticks and the ping tone on the audio clock.
 function scheduleCountdown(){
-  if(!A||!state)return;
-  const key=(state.status==='running'&&sndOn())?state.nextPing:null; if(key===schedKey)return;
-  sched.flat().forEach(o=>{try{o.stop()}catch(e){}});sched=[];schedKey=key;schedPingAt=0; if(key===null)return;
-  const rem=(state.nextPing-(Date.now()+skew))/1000,t=A.currentTime;
-  for(let k=10;k>=1;k--){const at=rem-k;if(at>.05)sched.push(SND.tick(t+at,false))}
-  if(rem>.05){sched.push(SND.ping(t+rem));schedPingAt=Date.now()+rem*1000}
+  if(!actx || !state) return;
+  const key = (state.status==='running' && sndOn()) ? state.nextPing : null;
+  if(key === schedKey) return;
+  sched.forEach(o => { try{ o.stop(); }catch(e){} }); sched = []; schedKey = key; schedPingAt = 0;
+  if(key === null) return;
+  const rem = (state.nextPing - (Date.now()+skew)) / 1000, t = actx.currentTime;
+  for(let k=10; k>=1; k--){ const at = rem-k; if(at > 0.05) sched.push(...SND.tick(t+at, false)); }
+  if(rem > 0.05){ sched.push(...SND.ping(t+rem)); schedPingAt = Date.now() + rem*1000; }
 }
-/* ===== BACKGROUND SURVIVAL: wake lock, silent audio loop, worker clock, notifications ===== */
-function silentUrl(){const n=8000,b=new ArrayBuffer(44+n),v=new DataView(b),w=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
-  w(0,'RIFF');v.setUint32(4,36+n,true);w(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,8000,true);v.setUint16(32,1,true);v.setUint16(34,8,true);w(36,'data');v.setUint32(40,n,true);new Uint8Array(b,44).fill(128);
-  return URL.createObjectURL(new Blob([b],{type:'audio/wav'}))}
-function keepAlive(){try{
-  if(!keepEl){keepEl=new Audio(silentUrl());keepEl.loop=true;keepEl.volume=.01;keepEl.addEventListener('pause',()=>{if(entered)keepEl.play().catch(()=>{})})}
-  keepEl.play().catch(()=>{});
-  if('mediaSession' in navigator){navigator.mediaSession.metadata=new MediaMetadata({title:'Manhunt is live',artist:'Game in progress'});navigator.mediaSession.playbackState='playing';
-    ['play','pause','stop'].forEach(a=>{try{navigator.mediaSession.setActionHandler(a,()=>keepEl.play().catch(()=>{}))}catch(e){}})}
-}catch(e){}}
-let wakeLock=null;
-async function keepAwake(){try{if('wakeLock' in navigator&&(!wakeLock||wakeLock.released))wakeLock=await navigator.wakeLock.request('screen')}catch(e){}}
-function notify(t,b,tag){if(!document.hidden)return;try{if('Notification' in window&&Notification.permission==='granted')new Notification(t,{body:b,tag:tag||'mh',renotify:true})}catch(e){}}
-const askNotify=()=>{try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission()}catch(e){}};
-// a Worker's clock is throttled far less than page timers, so pings and the countdown keep ticking in the background
-let wk;try{wk=new Worker(URL.createObjectURL(new Blob(['setInterval(()=>postMessage(1),1000)'])));wk.onmessage=()=>{hostTick();tick();if(entered&&me.isHost&&++saveN%5==0)store.set('mh_host',JSON.stringify(state))}}catch(e){setInterval(()=>{hostTick();tick()},1000)}
-let saveN=0;
-function wakeUp(){try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(e){} if(document.visibilityState==='visible'&&state&&state.status==='running'){keepAwake();snapCam()} audio(); schedKey='x'; scheduleCountdown(); if(entered&&!me.isHost&&!hostConn)attemptReconnect()}
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')wakeUp()});
-window.addEventListener('online',wakeUp);window.addEventListener('pageshow',wakeUp);
-['pointerdown','touchstart','keydown'].forEach(e=>document.addEventListener(e,()=>{if(!A||A.state!=='running')audio()},{passive:true}));
-setInterval(()=>{try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect();else if(peer&&peer.destroyed&&entered&&!me.isHost&&!recreating){recreating=true;newGuestPeer(0)}}catch(e){}},5000);
-setInterval(()=>{if(entered&&me.code)store.set('mh_sess',JSON.stringify({code:me.code,host:me.isHost,ts:Date.now()}))},30000);
-$('soundToggle').onchange=()=>{schedKey='x';scheduleCountdown()};
-$('testSnd').onclick=()=>{play('ping');setTimeout(()=>play('snap'),1800);setTimeout(()=>play('seek'),3200)};
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState==='visible'){ schedKey = 'resync'; unlockAudio(); scheduleCountdown(); }
+});
+['pointerdown','touchstart','keydown'].forEach(ev => document.addEventListener(ev, () => { if(!actx || actx.state!=='running') unlockAudio(); }, {passive:true}));
+$('soundToggle').onchange = () => { schedKey = 'resync'; scheduleCountdown(); };
+$('testSnd').onclick = () => { play('ping'); setTimeout(()=>play('chat'), 1500); setTimeout(()=>play('tick',true), 2200); };
 
-/* ===== profile ===== */
-const validPic=s=>typeof s==='string'&&s.startsWith('data:image/jpeg;base64,')&&s.length<20000;
-const resizeImg=f=>new Promise((res,rej)=>{const i=new Image(),u=URL.createObjectURL(f);i.onload=()=>{const S=72,c=document.createElement('canvas');c.width=c.height=S;const m=Math.min(i.width,i.height);c.getContext('2d').drawImage(i,(i.width-m)/2,(i.height-m)/2,m,m,0,0,S,S);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',.72))};i.onerror=rej;i.src=u});
-function avatar(p,size,team){const d=document.createElement('div');d.className='av'+(team?(team==='hider'?' h':' s'):'');d.style.width=d.style.height=size+'px';d.style.fontSize=Math.round(size*.42)+'px';
-  if(validPic(p.pic)){const i=document.createElement('img');i.src=p.pic;d.appendChild(i)}else d.textContent=((p.name||'?')[0]||'?').toUpperCase();return d}
-function paintPrev(){const a=avatar({name:$('name').value||'?',pic:me.pic},76);$('picPrev').replaceChildren(...a.childNodes)}
-me.pic=store.get('mh_pic');if(!validPic(me.pic))me.pic=null;$('name').value=store.get('mh_name')||'';$('name').addEventListener('input',paintPrev);paintPrev();
-$('picPrev').onclick=()=>$('picIn').click();
-async function onPic(e){const f=e.target.files[0];if(!f)return;try{me.pic=await resizeImg(f);store.set('mh_pic',me.pic);paintPrev();if(entered)send({t:'pic',pic:me.pic})}catch(x){toast('Could not read that image')}e.target.value=''}
-$('picIn').onchange=onPic;$('picIn2').onchange=onPic;
+// ---- location diagnostics ----
+const secureOk = window.isSecureContext && location.protocol !== 'file:';
+if(!secureOk) $('insecure').classList.remove('hidden');
+function geoErr(e){ if(!secureOk) return 'insecure'; if(!navigator.geolocation) return 'unsupported'; return e && e.code===1 ? 'denied' : e && e.code===2 ? 'unavailable' : e && e.code===3 ? 'timeout' : 'error'; }
+function geoHelp(c){ return ({
+  insecure:'This page must be opened over https:// (not a saved file or http). Host it on Netlify or GitHub Pages.',
+  denied:'Location is blocked. Allow it for this site in your browser settings, and turn on Location Services for your browser.',
+  unavailable:'No GPS fix available. Check Location Services is on, or step outside.',
+  timeout:'Location took too long. Move to open sky and try again.',
+  unsupported:'This browser has no location support.',
+  error:'Location failed.' })[c] || 'Location failed.'; }
+function getFix(ok, bad){
+  if(!secureOk || !navigator.geolocation){ bad(geoErr()); return; }
+  navigator.geolocation.getCurrentPosition(ok, e => bad(geoErr(e)), {enableHighAccuracy:true, timeout:20000, maximumAge:0});
+}
+let wakeLock = null;
+async function keepAwake(){ try{ if('wakeLock' in navigator && (!wakeLock || wakeLock.released)){ wakeLock = await navigator.wakeLock.request('screen'); } }catch(e){} }
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && state && state.status==='running') keepAwake(); });
+// NOTE: we deliberately do NOT destroy the peer on pagehide/background any more. Leaving the tab must never drop you from the game.
+// Reconnect watchdog: whenever the page comes back (or the network returns), reconnect to the signaling server and to the host.
+function wakeUp(){
+  try{ if(peer && peer.disconnected && !peer.destroyed) peer.reconnect(); }catch(e){}
+  if(entered && state && !me.isHost && !hostConn && !migrating){ reconUntil = Date.now()+45000; attemptReconnect(); }
+}
+document.addEventListener('visibilitychange', () => { if(document.visibilityState==='visible') wakeUp(); });
+window.addEventListener('online', wakeUp);
+window.addEventListener('pageshow', wakeUp);
+setInterval(() => {
+  try{
+    if(peer && peer.disconnected && !peer.destroyed) peer.reconnect();
+    else if(peer && peer.destroyed && entered && !me.isHost && !recreating){ recreating = true; newGuestPeer(0); }
+  }catch(e){}
+}, 5000);
+setInterval(() => { if(entered && me.code) store.set('mh_sess', JSON.stringify({code:me.code, ts:Date.now()})); }, 60000);
 
-/* ===== networking ===== */
-const params=new URLSearchParams(location.search);if(params.get('room'))$('code').value=params.get('room').toUpperCase();
-let recreating=false;
+// ---------- profile picture / name (saved on device) ----------
+const validPic = s => typeof s==='string' && s.startsWith('data:image/jpeg;base64,') && s.length<20000;
+function resizeImg(file){ return new Promise((res,rej)=>{ const img=new Image(), u=URL.createObjectURL(file);
+  img.onload=()=>{ const S=72,c=document.createElement('canvas'); c.width=c.height=S; const x=c.getContext('2d'); const m=Math.min(img.width,img.height);
+    x.drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,S,S); URL.revokeObjectURL(u); res(c.toDataURL('image/jpeg',.72)); };
+  img.onerror=rej; img.src=u; }); }
+function avatar(p, size, team){
+  const d=document.createElement('div'); d.className='av'+(team?(team==='hider'?' h':' s'):''); d.style.width=d.style.height=size+'px'; d.style.fontSize=Math.round(size*.42)+'px';
+  if(validPic(p.pic)){ const i=document.createElement('img'); i.src=p.pic; d.appendChild(i); } else d.textContent=((p.name||'?')[0]||'?').toUpperCase();
+  return d;
+}
+function paintPrev(){ const el=$('picPrev'); const a=avatar({name:$('name').value||'?',pic:me.pic},76); el.replaceChildren(...a.childNodes); el.style.fontSize='30px'; }
+me.pic = store.get('mh_pic'); if(!validPic(me.pic)) me.pic=null;
+$('name').value = store.get('mh_name')||''; $('name').addEventListener('input',paintPrev); paintPrev();
+$('picPrev').onclick = () => $('picIn').click();
+async function onPic(e){
+  const f=e.target.files[0]; if(!f) return;
+  try{ me.pic = await resizeImg(f); store.set('mh_pic', me.pic); paintPrev(); if(entered){ send({t:'pic', pic:me.pic}); } }catch(err){ toast('Could not read that image'); }
+  e.target.value='';
+}
+$('picIn').onchange = onPic; $('picIn2').onchange = onPic;
+
+// ---------- peer setup ----------
+const params = new URLSearchParams(location.search);
+if(params.get('room')) $('code').value = params.get('room').toUpperCase();
+
 function commonPeer(){
-  peer.on('disconnected',()=>setTimeout(()=>{try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(e){}},1000));
-  peer.on('call',onCall);
-  peer.on('connection',c=>{if(me.isHost)hostAccept(c);else c.on('open',()=>{c.send({t:'wait'});setTimeout(()=>c.close(),500)})});
-}
-async function startHost(code,restore){
-  me.isHost=true;me.code=code;store.set('mh_sess',JSON.stringify({code,host:true,ts:Date.now()}));await getMic();
-  peer=new Peer('manhunt-'+code);
-  peer.on('error',e=>toast(e.type==='unavailable-id'?'Code clash or old host still connected. Try again.':'Connection error: '+e.type));
-  peer.on('open',id=>{me.id=id;
-    if(restore&&restore.players){state=restore;state.hostId=id;Object.keys(state.players).forEach(k=>{if(k!==id){state.players[k].off=true;state.players[k].offAt=Date.now()}});state.players[id]=Object.assign(state.players[id]||{},{name:me.name,pic:me.pic,off:false})}
-    else state={status:'lobby',hostId:id,order:[id],players:{[id]:{name:me.name,team:'hider',pic:me.pic}},hideMin:5,pingMin:2,startAt:0,nextPing:0,photoAt:0,pingN:0,locs:{}};
-    broadcast()});
-  commonPeer();
-}
-$('create').onclick=()=>{audio();askNotify();me.name=$('name').value.trim()||'Host';store.set('mh_name',me.name);
-  const ch='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let c='';for(let i=0;i<4;i++)c+=ch[Math.floor(Math.random()*ch.length)];startHost(c)};
-async function doJoin(){audio();askNotify();me.name=$('name').value.trim()||'Player';store.set('mh_name',me.name);me.code=$('code').value.trim().toUpperCase();
-  if(me.code.length!==4){toast('Enter the 4-letter room code');return}
-  await getMic();store.set('mh_sess',JSON.stringify({code:me.code,host:false,ts:Date.now()}));newGuestPeer(0)}
-$('joinbtn').onclick=doJoin;
-function newGuestPeer(tries){
-  try{if(peer&&!peer.destroyed)peer.destroy()}catch(e){}
-  peer=new Peer('mhp-'+me.code+'-'+uid);
-  peer.on('error',e=>{
-    if(e.type==='unavailable-id'&&tries<15){setTimeout(()=>newGuestPeer(tries+1),3000);return}
-    if(e.type==='peer-unavailable'){if(!entered){toast('Room not found');store.set('mh_sess','')}return}
-    if(!entered)toast('Connection error: '+e.type)});
-  peer.on('open',id=>{me.id=id;recreating=false;connectToHost('manhunt-'+me.code,ok=>{if(!ok&&!entered){toast('Could not join that room');store.set('mh_sess','')}else if(!ok)attemptReconnect()})});
-  commonPeer();
-}
-function connectToHost(hid,cb){
-  const c=peer.connect(hid,{reliable:true});let done=false;
-  const fail=()=>{if(done)return;done=true;clearTimeout(to);try{c.close()}catch(e){}cb&&cb(false)};const to=setTimeout(fail,6000);
-  c.on('open',()=>c.send({t:'hello',name:me.name,pic:me.pic}));
-  c.on('data',d=>{
-    if(d.t==='state'){if(!done){done=true;clearTimeout(to);hostConn=c;cb&&cb(true)}applyState(d.s)}
-    else if(d.t==='ping')doPing();else if(d.t==='snap')doSnap(d.n);
-    else if(d.t==='live'){live[d.id]=d.l;drawLive()}else if(d.t==='liveoff'){delete live[d.id];drawLive()}
-    else if(d.t==='photo')addPhoto(d.p,false);else if(d.t==='photos')(d.list||[]).forEach(p=>addPhoto(p,true));
-    else if(d.t==='chat')addChat(d.m);else if(d.t==='chathist')(d.list||[]).forEach(m=>addChat(m,true));
-    else if(d.t==='wait')fail()});
-  c.on('close',()=>{clearTimeout(to);if(hostConn===c){hostConn=null;toast('Reconnecting…');attemptReconnect()}else fail()});c.on('error',fail);
-}
-function attemptReconnect(){ // never gives up: the host id is the room code, so it works when the host returns
-  if(me.isHost||hostConn||!state||reconBusy)return;reconBusy=true;
-  try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(e){}
-  connectToHost(state.hostId,ok=>{reconBusy=false;if(ok)toast('Back in the game');else setTimeout(attemptReconnect,2500)});
+  peer.on('disconnected', () => { setTimeout(() => { try{ if(peer && peer.disconnected && !peer.destroyed) peer.reconnect(); }catch(e){} }, 1000); });
+  peer.on('call', onCall);
+  peer.on('connection', c => {
+    if(me.isHost) hostAccept(c);
+    else c.on('open', () => { c.send({t:'wait'}); setTimeout(()=>c.close(),500); });
+  });
 }
 
-/* ===== host logic ===== */
-function hostAccept(c){c.on('open',()=>{conns[c.peer]=c});c.on('data',d=>hostHandle(c.peer,d));c.on('close',()=>{if(conns[c.peer]===c){delete conns[c.peer];if(state.players[c.peer]){state.players[c.peer].off=true;state.players[c.peer].offAt=Date.now();delete liveStore[c.peer]}broadcast()}})}
-function fuzz(lat,lng){const a=Math.random()*6.2832,d=Math.sqrt(Math.random())*FUZZ;return[lat+d*Math.cos(a)/111320,lng+d*Math.sin(a)/(111320*Math.cos(lat*Math.PI/180))]}
-function hostHandle(pid,d){
-  if(d.t==='live'||d.t==='liveoff'){onLive(pid,d);return}
-  if(d.t==='chat'){hostChat(pid,d);return}
-  if(d.t==='photo'){hostPhoto(pid,d);return}
-  if(d.t==='hello'){const ex=state.players[pid];state.players[pid]={name:String(d.name||'Player').slice(0,16),team:ex?ex.team:'hider',pic:validPic(d.pic)?d.pic:null};
-    if(!state.order.includes(pid))state.order.push(pid);
-    const c=conns[pid],p=state.players[pid];if(c){try{c.send({t:'chathist',list:chatLog.filter(m=>m.scope==='all'||m.team===p.team)});if(p.team==='seeker')c.send({t:'photos',list:photos})}catch(e){}}}
-  else if(d.t==='pic'){if(state.players[pid]&&validPic(d.pic))state.players[pid].pic=d.pic}
-  else if(d.t==='loc'){const p=state.players[pid];if(!p||p.team!=='hider'||state.status!=='running')return;
-    const arr=state.locs[pid]=state.locs[pid]||[];
-    if(d.err||typeof d.lat!=='number')arr.push({n:state.pingN,err:String(d.err||'error').slice(0,20),ts:Date.now()});
-    else{const prev=[...arr].reverse().find(a=>!a.err&&a.lat!==undefined);let cl,cg;
-      if(prev&&L.latLng(prev.lat,prev.lng).distanceTo(L.latLng(d.lat,d.lng))<STILL){cl=prev.clat;cg=prev.clng}else[cl,cg]=fuzz(d.lat,d.lng);
-      arr.push({n:state.pingN,lat:d.lat,lng:d.lng,clat:cl,clng:cg,ts:Date.now()})}
-    if(arr.length>40)arr.shift()}
+$('create').onclick = async () => {
+  unlockAudio(); askNotify();
+  me.name = $('name').value.trim() || 'Host'; store.set('mh_name', me.name); me.isHost = true;
+  const chars='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; me.code=''; for(let i=0;i<4;i++) me.code+=chars[Math.floor(Math.random()*chars.length)];
+  store.set('mh_sess', JSON.stringify({code:me.code, ts:Date.now()}));
+  await getMic();
+  peer = new Peer('manhunt-'+me.code);
+  peer.on('error', e => toast(e.type==='unavailable-id' ? 'Code clash, try again' : 'Connection error: '+e.type));
+  peer.on('open', id => {
+    me.id = id;
+    state = { status:'lobby', hostId:id, epoch:0, order:[id], players:{[id]:{name:me.name,team:'hider',pic:me.pic}}, hideMin:10, pingMin:5, startAt:0, nextPing:0, pingN:0, locs:{} };
+    tickHost = setInterval(hostTick, 1000);
+    broadcast();
+  });
+  commonPeer();
+};
+
+async function doJoin(){
+  unlockAudio(); askNotify();
+  me.name = $('name').value.trim() || 'Player'; store.set('mh_name', me.name); me.code = $('code').value.trim().toUpperCase();
+  if(me.code.length!==4){ toast('Enter the 4-letter room code'); return; }
+  await getMic();
+  store.set('mh_sess', JSON.stringify({code:me.code, ts:Date.now()}));
+  newGuestPeer(0);
+}
+$('joinbtn').onclick = () => doJoin();
+// Guests use a permanent id (room code + this phone's uid). Coming back reuses the same id, so the host
+// sees the same player returning rather than a new one. If the old id is still registered, wait and retry.
+function newGuestPeer(tries){
+  try{ if(peer && !peer.destroyed) peer.destroy(); }catch(e){}
+  peer = new Peer('mhp-'+me.code+'-'+uid);
+  peer.on('error', e => {
+    if(e.type==='unavailable-id' && tries<15){ setTimeout(()=>newGuestPeer(tries+1), 3000); if(!entered) toast('Reconnecting…'); return; }
+    if(e.type==='peer-unavailable'){ if(!entered){ toast('Room not found'); store.set('mh_sess',''); } return; }
+    if(!entered) toast('Connection error: '+e.type);
+  });
+  peer.on('open', id => {
+    me.id = id; recreating = false;
+    connectToHost('manhunt-'+me.code, ok => { if(!ok && !entered){ toast('Could not join that room'); store.set('mh_sess',''); } else if(!ok && entered){ reconUntil = Date.now()+45000; attemptReconnect(); } });
+  });
+  commonPeer();
+}
+
+function connectToHost(hostId, cb){
+  const c = peer.connect(hostId, {reliable:true});
+  let done = false;
+  const fail = () => { if(done) return; done=true; clearTimeout(to); try{c.close()}catch(e){} cb && cb(false); };
+  const to = setTimeout(fail, 6000);
+  c.on('open', () => c.send({t:'hello', name:me.name, pic:me.pic}));
+  c.on('data', d => {
+    if(d.t==='state'){ if(!done){ done=true; clearTimeout(to); hostConn=c; cb&&cb(true); } applyState(d.s); }
+    else if(d.t==='ping') doPing();
+    else if(d.t==='live'){ live[d.id]=d.l; drawLive(); }
+    else if(d.t==='liveoff'){ delete live[d.id]; drawLive(); }
+    else if(d.t==='chat') addChat(d.m);
+    else if(d.t==='chathist') (d.list||[]).forEach(m => addChat(m, true));
+    else if(d.t==='chatreset') resetTeamChat();
+    else if(d.t==='redirect'){ done=true; clearTimeout(to); c.close(); connectToHost(d.id, cb); }
+    else if(d.t==='wait') fail();
+  });
+  c.on('close', () => { clearTimeout(to); if(hostConn===c){ hostConn=null; onHostLost(); } else fail(); });
+  c.on('error', fail);
+}
+
+// ---------- host migration ----------
+// Losing the host connection (phone backgrounded, bad signal) first tries to just reconnect for 45s.
+// Only if the host really stays gone do we pick a new host.
+function onHostLost(){
+  if(migrating || !state || me.isHost) return;
+  if(!reconUntil || Date.now() > reconUntil) reconUntil = Date.now()+45000;
+  attemptReconnect();
+}
+function attemptReconnect(){
+  if(me.isHost || hostConn || !state || migrating || reconBusy) return;
+  clearTimeout(reconTimer);
+  if(Date.now() > reconUntil){ reconUntil = 0; startMigration(); return; }
+  reconBusy = true;
+  try{ if(peer && peer.disconnected && !peer.destroyed) peer.reconnect(); }catch(e){}
+  connectToHost(state.hostId, ok => {
+    reconBusy = false;
+    if(ok){ reconUntil = 0; toast('Back in the game'); }
+    else reconTimer = setTimeout(attemptReconnect, 2500);
+  });
+}
+function startMigration(){
+  if(migrating || !state || me.isHost) return;
+  migrating = true; toast('Host left. Choosing a new host…', 6000);
+  const old = state.hostId;
+  const cands = state.order.filter(id => id!==old && state.players[id] && !state.players[id].off);
+  tryCandidate(cands, 0, old);
+}
+function tryCandidate(cands, i, old){
+  if(i>=cands.length){ migrating=false; toast('No host available. The game ended.',10000); return; }
+  const id = cands[i];
+  if(id===me.id){ promote(old); return; }
+  let tries = 0;
+  const go = () => connectToHost(id, ok => {
+    if(ok){ migrating=false; toast('New host: '+(state.players[id]?.name||'?')); return; }
+    if(++tries<4) setTimeout(go, 2000); else tryCandidate(cands, i+1, old);
+  });
+  setTimeout(go, 1500);
+}
+function promote(old){
+  me.isHost = true; migrating = false;
+  state.nextPing -= skew; state.startAt -= skew;           // convert old host's clock to mine
+  state.hostId = me.id; state.epoch = (state.epoch||0)+1;
+  liveStore = Object.assign({}, live);                      // seed with what I could see
+  chatLog = chatMsgs.slice();
+  if(state.players[old]) removeOrOff(old);
+  Object.keys(conns).forEach(k => delete conns[k]);
+  if(!tickHost) tickHost = setInterval(hostTick, 1000);
+  startLobbyPeer(0);
+  toast('You are now the host', 6000);
+  broadcast();
+  setTimeout(prune, 12000);
+}
+function startLobbyPeer(n){           // keeps the room code working for late joiners after migration
+  if(n>15) return;
+  const lp = new Peer('manhunt-'+me.code);
+  lp.on('open', () => { lobbyPeer = lp; });
+  lp.on('connection', c => c.on('open', () => { c.send({t:'redirect', id:me.id}); setTimeout(()=>c.close(),800); }));
+  lp.on('error', e => { if(e.type==='unavailable-id'){ try{lp.destroy()}catch(_){} setTimeout(()=>startLobbyPeer(n+1), 4000); } });
+}
+// Disconnecting never removes a player. They're marked offline and keep their team, and they snap back in when they return.
+// (Offline players in the lobby are cleaned up after 2 minutes by hostTick; mid-game they are never removed.)
+function removeOrOff(id){
+  if(!state.players[id]) return;
+  delete liveStore[id];
+  state.players[id].off = true; state.players[id].offAt = Date.now();
+}
+function dropPlayer(id){
+  if(!state.players[id]) return;
+  delete liveStore[id]; delete state.players[id]; state.order = state.order.filter(x=>x!==id); delete state.locs[id];
+}
+function prune(){
+  let ch=false;
+  Object.keys(state.players).forEach(id => { if(id!==me.id && !(conns[id]&&conns[id].open) && !state.players[id].off){ removeOrOff(id); ch=true; } });
+  if(ch) broadcast();
+}
+
+// ---------- host logic ----------
+function hostAccept(c){
+  c.on('open', () => { conns[c.peer] = c; });
+  c.on('data', d => hostHandle(c.peer, d));
+  c.on('close', () => { if(conns[c.peer]===c){ delete conns[c.peer]; removeOrOff(c.peer); broadcast(); } });
+}
+function fuzz(lat,lng){
+  const ang=Math.random()*2*Math.PI, dist=Math.sqrt(Math.random())*FUZZ_M;
+  return [ lat + dist*Math.cos(ang)/111320, lng + dist*Math.sin(ang)/(111320*Math.cos(lat*Math.PI/180)) ];
+}
+function hostHandle(pid, d){
+  if(d.t==='live' || d.t==='liveoff'){ onLive(pid, d); return; }
+  if(d.t==='chat'){ hostChat(pid, d); return; }
+  if(d.t==='hello'){
+    const ex = state.players[pid];
+    state.players[pid] = { name:String(d.name||'Player').slice(0,16), team: ex?ex.team:'hider', pic: validPic(d.pic)?d.pic:null };
+    if(!state.order.includes(pid)) state.order.push(pid);
+    sendHistory(pid);
+  }
+  else if(d.t==='pic'){ if(state.players[pid] && validPic(d.pic)) state.players[pid].pic = d.pic; }
+  else if(d.t==='loc'){            // only hiders ping; this is the exact fix, which never leaves the host/hiders
+    const p = state.players[pid]; if(!p || p.team!=='hider' || state.status!=='running') return;
+    const arr = state.locs[pid] = state.locs[pid] || [];
+    if(d.err || typeof d.lat!=='number' || typeof d.lng!=='number') arr.push({n:state.pingN, err:String(d.err||'error').slice(0,20), ts:Date.now()});
+    else {
+      const prev = [...arr].reverse().find(a => !a.err && a.lat!==undefined);
+      let clat, clng;
+      if(prev && L.latLng(prev.lat,prev.lng).distanceTo(L.latLng(d.lat,d.lng)) < STILL_M){ clat=prev.clat; clng=prev.clng; }   // standing still: keep the same circle so repeat pings can't be averaged out
+      else [clat,clng] = fuzz(d.lat,d.lng);
+      arr.push({n:state.pingN, lat:d.lat, lng:d.lng, acc:d.acc, clat, clng, ts:Date.now()});
+    }
+    if(arr.length>40) arr.shift();
+  }
   broadcast();
 }
-function hostPhoto(pid,d){
-  const p=state.players[pid];if(!p||p.team!=='hider'||state.status!=='running')return;
-  const ok=typeof d.img==='string'&&d.img.startsWith('data:image/jpeg')&&d.img.length<90000;
-  const m={id:pid,name:p.name,pic:p.pic,n:d.n,ts:Date.now(),img:ok?d.img:null};
-  photos.push(m);if(photos.length>30)photos.shift();
-  Object.entries(conns).forEach(([cid,c])=>{if(state.players[cid]?.team==='seeker'){try{c.send({t:'photo',p:m})}catch(e){}}});
-  if(me.team==='seeker')addPhoto(m,false);
+// real-time location: relayed to the sender's own team only
+function onLive(pid, d){
+  const p = state.players[pid]; if(!p || state.status!=='running') return;
+  if(d.t==='live'){ if(typeof d.lat!=='number' || typeof d.lng!=='number') return; liveStore[pid] = {lat:d.lat, lng:d.lng, acc:d.acc, ts:Date.now()}; }
+  else delete liveStore[pid];
+  const msg = d.t==='live' ? {t:'live', id:pid, l:liveStore[pid]} : {t:'liveoff', id:pid};
+  Object.entries(conns).forEach(([cid,c]) => { if(cid!==pid && state.players[cid]?.team===p.team){ try{c.send(msg)}catch(e){} } });
+  if(pid!==me.id && me.team===p.team){ if(d.t==='live') live[pid]=liveStore[pid]; else delete live[pid]; drawLive(); }
 }
-function onLive(pid,d){
-  const p=state.players[pid];if(!p||state.status!=='running')return;
-  if(d.t==='live'){if(typeof d.lat!=='number')return;liveStore[pid]={lat:d.lat,lng:d.lng,acc:d.acc,ts:Date.now()}}else delete liveStore[pid];
-  const msg=d.t==='live'?{t:'live',id:pid,l:liveStore[pid]}:{t:'liveoff',id:pid};
-  const sees=team=>p.team==='seeker'||team==='hider'||team===p.team; // hiders see everyone; seekers only see seekers
-  Object.entries(conns).forEach(([cid,c])=>{if(cid!==pid&&sees(state.players[cid]?.team)){try{c.send(msg)}catch(e){}}});
-  if(pid!==me.id&&sees(me.team)){if(d.t==='live')live[pid]=liveStore[pid];else delete live[pid];drawLive()}
-}
+// One circle per group of hiders. A hider already inside an existing circle doesn't get their own;
+// every circle then lists ALL hiders whose last known spot is inside it. Centers come from each anchor's stored (fuzzed) center, so they stay put between broadcasts.
 function computeAreas(){
-  const lf=id=>{const a=state.locs[id]||[];for(let i=a.length-1;i>=0;i--)if(!a[i].err&&a[i].lat!==undefined)return a[i];return null};
-  const hs=[];state.order.forEach(id=>{const p=state.players[id];if(!p||p.team!=='hider'||p.off)return;const e=lf(id);if(e)hs.push({id,e,ll:L.latLng(e.lat,e.lng)})});
-  const cs=[];hs.forEach(h=>{if(!cs.some(c=>c.distanceTo(h.ll)<=RAD))cs.push(L.latLng(h.e.clat,h.e.clng))});
-  return cs.map(c=>({clat:c.lat,clng:c.lng,m:hs.filter(h=>c.distanceTo(h.ll)<=RAD).map(h=>({id:h.id,n:h.e.n,ts:h.e.ts}))}));
+  const lastFix = id => { const a=state.locs[id]||[]; for(let i=a.length-1;i>=0;i--) if(!a[i].err && a[i].lat!==undefined) return a[i]; return null; };
+  const hs = [];
+  state.order.forEach(id => {
+    const p = state.players[id]; if(!p || p.team!=='hider' || p.off) return;
+    const e = lastFix(id); if(e) hs.push({id, e, ll:L.latLng(e.lat,e.lng)});
+  });
+  const centers = [];
+  hs.forEach(h => { if(!centers.some(c => c.distanceTo(h.ll) <= RADIUS_M)) centers.push(L.latLng(h.e.clat, h.e.clng)); });
+  return centers.map(c => ({
+    clat:c.lat, clng:c.lng,
+    m: hs.filter(h => c.distanceTo(h.ll) <= RADIUS_M).map(h => ({id:h.id, n:h.e.n, ts:h.e.ts}))
+  }));
 }
-// Exact hider coordinates never leave the host. Everyone gets only the fuzzed circle data.
+// what each team may see:
+//   hiders  -> exact pings + live positions of hiders
+//   seekers -> only a rough 0.2-mile circle per hider ping (no exact coordinates) + live positions of seekers
 function viewFor(team){
-  const locs={};Object.entries(state.locs).forEach(([id,arr])=>{if(state.players[id]?.team!=='hider')return;locs[id]=arr.map(a=>a.err?{n:a.n,err:a.err,ts:a.ts}:{n:a.n,ts:a.ts,clat:a.clat,clng:a.clng})});
-  const lv={};Object.entries(liveStore).forEach(([id,l])=>{const p=state.players[id];if(p&&(p.team==='seeker'||team==='hider'))lv[id]=l});
-  return Object.assign({},state,{locs,live:lv,areas:computeAreas(),now:Date.now()});
+  const locs = {};
+  Object.entries(state.locs).forEach(([id,arr]) => {
+    const p = state.players[id]; if(!p || p.team!=='hider') return;
+    locs[id] = team==='hider' ? arr : arr.map(a => a.err ? {n:a.n, err:a.err, ts:a.ts} : {n:a.n, ts:a.ts, clat:a.clat, clng:a.clng});
+  });
+  const lv = {};
+  Object.entries(liveStore).forEach(([id,l]) => { const p=state.players[id]; if(p && p.team===team) lv[id]=l; });
+  return Object.assign({}, state, {locs, live:lv, areas:computeAreas(), now:Date.now()});
 }
 function broadcast(){
-  Object.entries(conns).forEach(([cid,c])=>{try{c.send({t:'state',s:viewFor(state.players[cid]?.team)})}catch(e){}});
+  Object.entries(conns).forEach(([cid,c]) => { try{ c.send({t:'state', s:viewFor(state.players[cid]?.team)}); }catch(e){} });
   applyState(JSON.parse(JSON.stringify(viewFor(state.players[me.id]?.team))));
 }
 function firePing(){
-  state.pingN++;state.photoAt=Date.now()+Math.min(60000,state.pingMin*30000);
-  Object.values(conns).forEach(c=>{try{c.send({t:'ping'})}catch(e){}});doPing();broadcast();
+  state.pingN++;
+  Object.values(conns).forEach(c => { try{ c.send({t:'ping'}); }catch(e){} });
+  doPing(); broadcast();
 }
 function hostTick(){
-  if(!me.isHost||!state)return;const now=Date.now();
-  if(state.status==='lobby'){let ch=false;Object.keys(state.players).forEach(id=>{const p=state.players[id];if(id!==me.id&&p.off&&now-(p.offAt||0)>120000){delete state.players[id];state.order=state.order.filter(x=>x!==id);ch=true}});if(ch)broadcast()}
-  if(state.status==='running'){
-    if(now>=state.nextPing){state.nextPing+=state.pingMin*60000;firePing()}
-    if(state.photoAt&&now>=state.photoAt){state.photoAt=0;
-      Object.entries(conns).forEach(([id,c])=>{if(state.players[id]?.team==='hider'){try{c.send({t:'snap',n:state.pingN})}catch(e){}}});
-      if(me.team==='hider')doSnap(state.pingN)}
+  if(!me.isHost) return;
+  if(state.status==='lobby'){
+    let ch = false;
+    Object.keys(state.players).forEach(id => { const p = state.players[id]; if(id!==me.id && p.off && Date.now()-(p.offAt||0) > 120000){ dropPlayer(id); ch = true; } });
+    if(ch) broadcast();
+  }
+  if(state.status==='running' && Date.now() >= state.nextPing){
+    state.nextPing += state.pingMin*60000;
+    firePing();
   }
 }
-$('pingNow').onclick=()=>{if(me.isHost&&state.status==='running')firePing()};
-$('start').onclick=()=>{audio();chatLog=chatLog.filter(m=>m.scope==='all');photos=[];
-  state.hideMin=Math.max(0,+$('hideMin').value||0);state.pingMin=Math.max(1,+$('pingMin').value||2);
-  state.locs={};liveStore={};live={};state.pingN=0;state.photoAt=0;state.startAt=Date.now();
-  state.nextPing=Date.now()+(state.hideMin===0?1000:state.hideMin*60000);state.status='running';broadcast();keepAwake()};
-$('rand').onclick=()=>{const ids=Object.keys(state.players).filter(id=>!state.players[id].off);
-  for(let i=ids.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ids[i],ids[j]]=[ids[j],ids[i]]}
-  const k=Math.min(Math.max(0,Math.floor(+$('seekN').value||0)),Math.max(ids.length-1,0));
-  ids.forEach((id,i)=>state.players[id].team=i<k?'seeker':'hider');broadcast();toast('Teams randomized')};
-$('end').onclick=()=>{state.status='over';liveStore={};broadcast()};
-$('again').onclick=()=>{state.status='lobby';state.locs={};liveStore={};state.pingN=0;photos=[];Object.keys(state.players).forEach(id=>{if(state.players[id].off){delete state.players[id];state.order=state.order.filter(x=>x!==id)}});broadcast()};
+$('pingNow').onclick = () => { if(me.isHost && state.status==='running') firePing(); };
+$('start').onclick = () => {
+  unlockAudio();
+  resetChatHost();
+  state.hideMin = Math.max(0, +$('hideMin').value||0); state.pingMin = Math.max(1, +$('pingMin').value||5);
+  state.locs = {}; liveStore = {}; live = {}; state.pingN = 0; state.startAt = Date.now();
+  state.nextPing = Date.now() + (state.hideMin===0 ? 1000 : state.hideMin*60000);
+  state.status = 'running'; broadcast(); keepAwake();
+};
+$('rand').onclick = () => {
+  const ids = Object.keys(state.players).filter(id => !state.players[id].off);
+  for(let i=ids.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [ids[i],ids[j]]=[ids[j],ids[i]]; }
+  let k = Math.max(0, Math.floor(+$('seekN').value||0)); k = Math.min(k, Math.max(ids.length-1,0));
+  ids.forEach((id,i) => state.players[id].team = i<k ? 'seeker' : 'hider');
+  broadcast(); toast('Teams randomized');
+};
+$('end').onclick = () => { state.status='over'; liveStore={}; broadcast(); };
+$('again').onclick = () => { resetChatHost(); state.status='lobby'; state.locs={}; liveStore={}; state.pingN=0; Object.keys(state.players).forEach(id=>{ if(state.players[id].off) dropPlayer(id); }); broadcast(); };
 
-/* ===== client ===== */
-function send(d){if(me.isHost)hostHandle(me.id,d);else if(hostConn&&hostConn.open)hostConn.send(d)}
+// ---------- client state ----------
+function send(d){ if(me.isHost) hostHandle(me.id, d); else if(hostConn && hostConn.open) hostConn.send(d); }
 function applyState(s){
-  state=s;skew=s.now-Date.now();const mine=s.players[me.id];if(mine)me.team=mine.team;
-  if(!entered){entered=true;$('join').classList.add('hidden');$('app').classList.remove('hidden');$('roomcode').textContent=me.code;initMap()}
-  const pinged=!first&&lastPingN!==null&&s.pingN>lastPingN;lastPingN=s.pingN;first=false;
-  if(s.status==='running'){keepAwake();const own=live[me.id];live=Object.assign({},s.live||{});if(own&&(!live[me.id]||own.ts>live[me.id].ts))live[me.id]=own;startWatch();if(me.team==='hider')snapCam()}
-  else{live={};stopWatch();stopSnapCam()}
-  if(s.status!==prevStatus){setSheet(s.status!=='running');
-    if(s.status==='running'&&!resumed){showReveal();photos=me.isHost?photos:[];renderGal()}
-    if(s.status==='lobby'){photos=me.isHost?[]:[];renderGal()}
-    if(s.status==='over'){play('over');notify('Manhunt','The game is over.','over')}}
-  prevStatus=s.status;render();syncCalls();scheduleCountdown();
-  if(pinged){const pre=A&&A.state==='running'&&Math.abs(Date.now()-schedPingAt)<4000;if(!pre)play('ping');
-    if(navigator.vibrate)navigator.vibrate([200,100,200]);flash();
-    const m=me.team==='hider'?'Ping. Seekers got a rough circle around you. Photo in 1 min.':'Ping. Hider circles updated. Photos incoming.';toast(m);notify('Manhunt ping',m,'ping')}
+  state = s; skew = s.now - Date.now();
+  const mine = s.players[me.id]; if(mine) me.team = mine.team;
+  if(!entered){ entered = true; enterApp(); }
+  const pinged = !firstState && lastPingN!==null && s.pingN > lastPingN;
+  lastPingN = s.pingN; firstState = false;
+  if(s.status==='running'){
+    keepAwake();
+    const own = live[me.id];
+    live = Object.assign({}, s.live||{});
+    if(own && (!live[me.id] || own.ts > live[me.id].ts)) live[me.id] = own;
+    startWatch();
+  } else { live = {}; stopWatch(); }
+  if(s.status!==prevStatus){
+    setSheet(s.status!=='running');
+    if(s.status==='running' && !resumed) showReveal();
+    if(s.status==='lobby') seenAreas.clear();
+    if(s.status==='over'){ play('ping'); notify('Manhunt','The game is over.','over'); }
+  }
+  prevStatus = s.status;
+  render(); syncCalls(); scheduleCountdown(); syncCam();
+  if(pinged){
+    // the ping tone may already have been scheduled on the audio clock; only play it now if it wasn't
+    const pre = actx && actx.state==='running' && Math.abs(Date.now()-schedPingAt) < 4000;
+    if(!pre) play('ping');
+    if(navigator.vibrate) navigator.vibrate([200,100,200]);
+    pingFx();
+    const msg = me.team==='hider' ? 'Ping. Seekers got a rough circle around you.' : 'Ping. Hider circles are updating.';
+    toast(msg); notify('Manhunt ping', msg, 'ping');
+  }
+  if(me.team==='seeker' && s.status==='running'){
+    (s.areas||[]).forEach(a => {
+      const k = a.clat.toFixed(5)+a.clng.toFixed(5)+a.m.map(x=>x.id+':'+x.n).join(',');
+      if(!seenAreas.has(k)){ seenAreas.add(k); pulse([a.clat,a.clng], HC, RADIUS_M*.25, RADIUS_M*1.7); }
+    });
+  }
 }
-function flash(){const f=$('flash');f.classList.remove('go');void f.offsetWidth;f.classList.add('go');
-  if(me.team==='hider'&&live[me.id])pulse([live[me.id].lat,live[me.id].lng],HC,8,RAD*1.2)}
-function pulse(ll,col,r0,r1){if(!map)return;const c=L.circle(ll,{radius:r0,color:col,weight:3,fill:false,interactive:false}).addTo(map),t0=performance.now();
-  (function st(t){const k=Math.min(1,(t-t0)/1400),e=1-Math.pow(1-k,3);c.setRadius(r0+(r1-r0)*e);c.setStyle({opacity:1-k});if(k<1)requestAnimationFrame(st);else c.remove()})(t0)}
+
+// ---------- my location ----------
+// Live: only while a game is running, only sent to my own team.
 function startWatch(){
-  if(watchId!==null||!navigator.geolocation||!$('liveToggle').checked)return;
-  watchId=navigator.geolocation.watchPosition(p=>{lastFix={lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy,ts:Date.now()};
-    if(Date.now()-lastSent<4000)return;lastSent=Date.now();live[me.id]={lat:lastFix.lat,lng:lastFix.lng,acc:lastFix.acc,ts:Date.now()+skew};drawLive();send({t:'live',lat:lastFix.lat,lng:lastFix.lng,acc:lastFix.acc})},
-    e=>{if(!watchErr){watchErr=true;toast('Live location off: '+geoHelp(geoErr(e)),9000)}},{enableHighAccuracy:true,maximumAge:2000,timeout:20000})}
-function stopWatch(){if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null}lastFix=null}
-$('liveToggle').onchange=()=>{if($('liveToggle').checked){if(state&&state.status==='running')startWatch()}else{stopWatch();delete live[me.id];send({t:'liveoff'});drawLive()}};
-function geoErr(e){return !secureOk?'insecure':!navigator.geolocation?'unsupported':e&&e.code===1?'denied':e&&e.code===2?'unavailable':e&&e.code===3?'timeout':'error'}
-function geoHelp(c){return({insecure:'Open this page over https, not a saved file.',denied:'Location is blocked. Allow it for this site and turn on Location Services.',unavailable:'No GPS fix. Check Location Services.',timeout:'Location timed out. Try open sky.',unsupported:'No location support in this browser.',error:'Location failed.'})[c]||'Location failed.'}
-function getFix(ok,bad){if(!secureOk||!navigator.geolocation){bad(geoErr());return}navigator.geolocation.getCurrentPosition(ok,e=>bad(geoErr(e)),{enableHighAccuracy:true,timeout:20000,maximumAge:0})}
+  if(watchId!==null || !navigator.geolocation || !$('liveToggle').checked) return;
+  watchId = navigator.geolocation.watchPosition(p => {
+    lastFix = {lat:p.coords.latitude, lng:p.coords.longitude, acc:p.coords.accuracy, ts:Date.now()};
+    if(Date.now()-lastSent < 4000) return;
+    lastSent = Date.now();
+    live[me.id] = {lat:lastFix.lat, lng:lastFix.lng, acc:lastFix.acc, ts:Date.now()+skew};
+    drawLive();
+    send({t:'live', lat:lastFix.lat, lng:lastFix.lng, acc:lastFix.acc});
+  }, e => { if(!watchErrShown){ watchErrShown=true; toast('Live location off: '+geoHelp(geoErr(e)), 9000); } },
+  {enableHighAccuracy:true, maximumAge:2000, timeout:20000});
+}
+function stopWatch(){ if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; } lastFix=null; }
+$('liveToggle').onchange = () => {
+  if($('liveToggle').checked){ if(state && state.status==='running') startWatch(); }
+  else { stopWatch(); delete live[me.id]; send({t:'liveoff'}); drawLive(); }
+};
+// Ping: hiders only. Seekers see a rough 0.2-mile circle, built by the host.
 function doPing(){
-  if(!state||state.status!=='running'||me.team!=='hider')return;
-  if(lastFix&&Date.now()-lastFix.ts<20000){send({t:'loc',lat:lastFix.lat,lng:lastFix.lng});return}
-  getFix(p=>send({t:'loc',lat:p.coords.latitude,lng:p.coords.longitude}),c=>{toast('Ping failed: '+geoHelp(c),9000);send({t:'loc',err:c})});
+  if(!state || state.status!=='running' || me.team!=='hider') return;
+  if(lastFix && Date.now()-lastFix.ts < 20000){ send({t:'loc', lat:lastFix.lat, lng:lastFix.lng, acc:lastFix.acc}); return; }
+  getFix(
+    p => send({t:'loc', lat:p.coords.latitude, lng:p.coords.longitude, acc:p.coords.accuracy}),
+    code => { toast('Ping failed: '+geoHelp(code), 9000); send({t:'loc', err:code}); }
+  );
 }
 
-/* ===== spy photo: hider camera stays armed, snaps 1 min after each ping ===== */
-let camBusy=false;
-async function snapCam(){
-  if(snapStream&&snapStream.getVideoTracks().some(t=>t.readyState==='live')||camBusy||!navigator.mediaDevices)return;camBusy=true;
-  try{snapStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:640},height:{ideal:480}},audio:false});
-    const v=$('snapV');v.srcObject=snapStream;v.play().catch(()=>{})}
-  catch(e){toast('Camera blocked. Seekers will not get your photos. Allow camera for this site.',7000)}
-  camBusy=false}
-function stopSnapCam(){if(snapStream){snapStream.getTracks().forEach(t=>t.stop());snapStream=null}}
-async function doSnap(n){
-  if(me.team!=='hider'||!state||state.status!=='running')return;
-  if(!snapStream)await snapCam();
-  const v=$('snapV');
-  try{ if(v.paused)await v.play();
-    if(!v.videoWidth)await new Promise(r=>setTimeout(r,600));
-    const w=360,h=Math.round(w*(v.videoHeight||3)/(v.videoWidth||4)),c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(v,0,0,w,h);
-    send({t:'photo',n,img:c.toDataURL('image/jpeg',.6)});play('snap');
-  }catch(e){send({t:'photo',n,img:null})}
+// ---------- effects ----------
+function pulse(ll, color, r0, r1, dur=1400){
+  if(!map) return;
+  const c = L.circle(ll,{radius:r0,color,weight:3,fill:false,interactive:false}).addTo(map);
+  const t0 = performance.now();
+  (function step(t){
+    const k = Math.min(1,(t-t0)/dur), e = 1-Math.pow(1-k,3);
+    c.setRadius(r0+(r1-r0)*e); c.setStyle({opacity:1-k});
+    if(k<1) requestAnimationFrame(step); else c.remove();
+  })(t0);
 }
-function addPhoto(p,quiet){
-  if(!p||photos.some(x=>x.id===p.id&&x.ts===p.ts&&!(me.isHost&&x===p&&false)))return;
-  if(!photos.includes(p))photos.push(p);renderGal();if(quiet)return;
-  play('snap');notify('Photo from '+p.name,'A hider was spotted.','photo');if(navigator.vibrate)navigator.vibrate([80,60,200]);showPhoto(p);
+function pingFx(){
+  const f = $('flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+  if(me.team==='hider' && live[me.id]) pulse([live[me.id].lat, live[me.id].lng], HC, 8, RADIUS_M*1.2);
 }
-function showPhoto(p){
-  $('pAv').replaceChildren(avatar(p,56,'hider'));$('pName').textContent=p.name;$('pMeta').textContent='HIDER · ping '+p.n+' · '+ago(p.ts);
-  const i=$('pImg');if(p.img){i.src=p.img;i.style.display='block'}else{i.removeAttribute('src');i.style.display='none';$('pMeta').textContent+=' · camera unavailable'}
-  $('photo').classList.remove('hidden')}
-$('pClose').onclick=()=>$('photo').classList.add('hidden');
-function renderGal(){const g=$('gal');g.innerHTML='';$('galWrap').classList.toggle('hidden',!(me.team==='seeker'&&photos.length));
-  photos.slice().reverse().forEach(p=>{if(!p.img)return;const i=document.createElement('img');i.src=p.img;i.title=p.name;i.onclick=()=>showPhoto(p);g.appendChild(i)})}
-
-/* ===== reveal + render ===== */
 function showReveal(){
-  const r=$('reveal'),h=me.team==='hider';r.dataset.t=me.team;$('rvWord').textContent=h?'HIDE':'SEEK';
-  $('rvSub').textContent=h?'Seekers get a 0.2 mile circle every '+state.pingMin+' min, then your photo. Keep moving.':'Hiders show as circles every '+state.pingMin+' min, then a photo of each. Their team sees you live.';
-  r.className='';void r.offsetWidth;r.classList.add('show');play(h?'hide':'seek');
-  notify(h?'You are a HIDER':'You are a SEEKER',h?'Go hide.':'Get ready.','role');if(navigator.vibrate)navigator.vibrate([120,60,120,60,300]);
-  clearTimeout(showReveal._a);clearTimeout(showReveal._b);showReveal._a=setTimeout(()=>r.classList.add('fade'),3000);showReveal._b=setTimeout(()=>{r.className='hidden'},3600)}
-$('reveal').onclick=()=>{$('reveal').className='hidden'};
-function setSheet(o){sheetOpen=o;$('sheet').classList.toggle('open',o)}$('sheetBtn').onclick=()=>setSheet(!sheetOpen);
+  const r = $('reveal'), h = me.team==='hider';
+  r.dataset.t = me.team;
+  $('rvWord').textContent = h ? 'HIDE' : 'SEEK';
+  $('rvSub').textContent = h
+    ? 'Seekers get a 0.2 mile circle around you every '+state.pingMin+' min. Keep moving.'
+    : 'Hiders show up as 0.2 mile circles every '+state.pingMin+' min. Your team shows live.';
+  r.className = ''; void r.offsetWidth; r.classList.add('show');
+  play(h ? 'hide' : 'seek');
+  notify(h ? 'You are a HIDER' : 'You are a SEEKER', h ? 'Go hide. Keep moving.' : 'Hiders are hiding. Get ready.', 'role');
+  if(navigator.vibrate) navigator.vibrate([120,60,120,60,300]);
+  clearTimeout(showReveal._a); clearTimeout(showReveal._b);
+  showReveal._a = setTimeout(() => r.classList.add('fade'), 3000);
+  showReveal._b = setTimeout(() => { r.className = 'hidden'; }, 3600);
+}
+$('reveal').onclick = () => { $('reveal').className = 'hidden'; };
+
+// ---------- render ----------
+function setSheet(o){ sheetOpen = o; $('sheet').classList.toggle('open', o); }
+$('sheetBtn').onclick = () => setSheet(!sheetOpen);
+function enterApp(){
+  $('join').classList.add('hidden'); $('app').classList.remove('hidden');
+  $('roomcode').textContent = me.code;
+  initMap();
+}
 function render(){
-  const s=state,lobby=s.status==='lobby';document.body.dataset.theme=lobby?'neutral':me.team;
-  $('status').textContent={lobby:'Lobby',running:'Live',over:'Over'}[s.status];
-  $('hostSettings').classList.toggle('hidden',!(me.isHost&&lobby));$('guestWait').classList.toggle('hidden',me.isHost||!lobby);$('lobbyBox').classList.toggle('hidden',!lobby);
-  $('end').classList.toggle('hidden',!(me.isHost&&s.status==='running'));$('pingNow').classList.toggle('hidden',!(me.isHost&&s.status==='running'));$('again').classList.toggle('hidden',!(me.isHost&&s.status==='over'));
-  $('teamTxt').textContent=lobby?'Right now you are a '+me.team:(me.team==='hider'?"You're hiding":"You're seeking");
-  $('rule').textContent=me.team==='hider'?`You see every seeker live. Seekers see a rough 0.2 mile circle around you every ${s.pingMin} min, and your camera photo 1 min later.`:`You see fellow seekers live. Hiders appear only as 0.2 mile circles every ${s.pingMin} min, followed by a photo of each.`;
-  const a=avatar(s.players[me.id]||{name:me.name,pic:me.pic},40,me.team);$('meAv').replaceChildren(...a.childNodes);$('meAv').className=a.className;
-  $('pttSub').textContent=me.team==='hider'?'Hider radio':'Seeker radio';$('sheetCount').textContent=Object.values(s.players).filter(p=>!p.off).length;renderGal();
-  const ul=$('players');ul.innerHTML='';
-  s.order.forEach(id=>{const p=s.players[id];if(!p)return;const li=document.createElement('li');if(p.off)li.classList.add('off');li.appendChild(avatar(p,38,p.team));
-    const w=document.createElement('div');w.className='who';const n=document.createElement('div');n.className='nm2';n.textContent=p.name+(id===me.id?' (you)':'');
-    const sb=document.createElement('div');sb.className='small';const last=(s.locs[id]||[]).slice(-1)[0],b=[];if(id===s.hostId)b.push('host');if(p.off)b.push('offline');else if(last)b.push(last.err?'no fix':'ping '+ago(last.ts));sb.textContent=b.join(', ');
-    w.append(n,sb);li.appendChild(w);const tg=document.createElement('span');tg.className='tg '+(p.team==='hider'?'h':'s');tg.textContent=p.team==='hider'?'Hider':'Seeker';li.appendChild(tg);
-    if(me.isHost&&lobby){li.classList.add('tap');li.onclick=()=>{state.players[id].team=state.players[id].team==='hider'?'seeker':'hider';broadcast()}}ul.appendChild(li)});
-  drawMap();tick();
+  const s = state, lobby = s.status==='lobby';
+  document.body.dataset.theme = lobby ? 'neutral' : me.team;
+  $('status').textContent = {lobby:'Lobby',running:'Live',over:'Over'}[s.status];
+  $('hostSettings').classList.toggle('hidden', !(me.isHost && lobby));
+  $('guestWait').classList.toggle('hidden', me.isHost || !lobby);
+  $('lobbyBox').classList.toggle('hidden', !lobby);
+  $('end').classList.toggle('hidden', !(me.isHost && s.status==='running'));
+  $('pingNow').classList.toggle('hidden', !(me.isHost && s.status==='running'));
+  $('again').classList.toggle('hidden', !(me.isHost && s.status==='over'));
+
+  const role = me.team==='hider' ? 'hider' : 'seeker';
+  $('teamTxt').textContent = lobby ? 'Right now you are a '+role : (me.team==='hider' ? "You're hiding" : "You're seeking");
+  $('rule').textContent = me.team==='hider'
+    ? `Your team sees you live. Seekers only see a rough 0.2 mile circle around each hider every ${s.pingMin} min.`
+    : `You see your fellow seekers live. Hiders show up as a 0.2 mile circle every ${s.pingMin} min.`;
+  const mine = s.players[me.id]||{name:me.name,pic:me.pic}; const a = avatar(mine,40,me.team); $('meAv').replaceChildren(...a.childNodes); $('meAv').className=a.className;
+  $('pttSub').textContent = me.team==='hider' ? 'Hider radio' : 'Seeker radio';
+  $('sheetCount').textContent = Object.values(s.players).filter(p=>!p.off).length;
+
+  const ul = $('players'); ul.innerHTML='';
+  s.order.forEach(id => {
+    const p = s.players[id]; if(!p) return;
+    const li = document.createElement('li'); if(p.off) li.classList.add('off');
+    li.appendChild(avatar(p,38,p.team));
+    const who = document.createElement('div'); who.className='who';
+    const n = document.createElement('div'); n.className='nm2'; n.textContent = p.name+(id===me.id?' (you)':'');
+    const sub = document.createElement('div'); sub.className='sub2';
+    const last = (s.locs[id]||[]).slice(-1)[0];
+    const bits = [];
+    if(id===s.hostId) bits.push('host');
+    if(p.off) bits.push('offline');
+    else if(last) bits.push(last.err ? 'no fix ('+last.err+')' : 'ping '+ago(last.ts));
+    sub.textContent = bits.join(', ');
+    who.append(n, sub); li.appendChild(who);
+    const tg = document.createElement('span'); tg.className='tg '+(p.team==='hider'?'h':'s'); tg.textContent = p.team==='hider' ? 'Hider' : 'Seeker'; li.appendChild(tg);
+    if(me.isHost && lobby){ li.classList.add('tap'); li.onclick = () => { state.players[id].team = state.players[id].team==='hider'?'seeker':'hider'; broadcast(); }; }
+    ul.appendChild(li);
+  });
+  drawMap(); tick();
 }
 function tick(){
-  if(!state||!entered)return;const s=state,now=Date.now()+skew,c=$('count');let urg=false;
-  if(s.status==='running'){const rem=s.nextPing-now;$('countlbl').textContent=s.pingN===0?(me.team==='hider'?'Time left to hide':'Hiders are hiding. First ping in'):'Next ping in';c.textContent=fmt(rem);urg=rem<=10000;
-    const sn=$('snapNote');if(s.photoAt&&s.pingN>0){const r=s.photoAt-now;sn.textContent=(me.team==='hider'?'Your photo goes out in ':'Hider photos in ')+fmt(r);sn.classList.toggle('hidden',r<=0)}else sn.classList.add('hidden')}
-  else{$('snapNote').classList.add('hidden');$('countlbl').textContent=s.status==='over'?'Game over':'Waiting to start';c.textContent='--:--'}
-  c.classList.toggle('urgent',urg);
+  if(!state) return;
+  const s = state, now = Date.now()+skew, c = $('count');
+  let urgent = false;
+  if(s.status==='running'){
+    const rem = s.nextPing-now;
+    $('countlbl').textContent = s.pingN===0 ? (me.team==='hider' ? 'Time left to hide' : 'Hiders are hiding. First ping in') : 'Next ping in';
+    c.textContent = fmt(rem);
+    urgent = rem<=10000;
+  } else if(s.status==='over'){ $('countlbl').textContent='Game over'; c.textContent='--:--'; }
+  else { $('countlbl').textContent='Waiting to start'; c.textContent='--:--'; }
+  c.classList.toggle('urgent', urgent);
 }
-setInterval(()=>{if(entered&&state)drawMap()},5000);
+setInterval(tick, 500);
+setInterval(() => { if(entered && state) drawMap(); }, 5000);
 
-/* ===== map ===== */
-function initMap(){map=L.map('map',{zoomControl:false}).setView([39,-98],4);L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
-  L.control.zoom({position:'bottomleft'}).addTo(map);layerP=L.layerGroup().addTo(map);layerL=L.layerGroup().addTo(map);setTimeout(()=>map.invalidateSize(),200)}
-const tape=(t,team)=>{const d=document.createElement('div');d.className='tape '+(team==='hider'?'th':'ts');d.textContent=t;return d};
-function pinIcon(p,tag,id){const w=document.createElement('div');w.className='pin';const av=avatar(p,40,p.team);if(id===me.id)av.classList.add('self');
-  const tm=document.createElement('div');tm.className='tm';tm.textContent=tag;w.append(tape(p.name,p.team),av,tm);return L.divIcon({html:w,className:'',iconSize:[110,82],iconAnchor:[55,46]})}
-function clusterIcon(items,maxN,newest){const w=document.createElement('div');w.className='pin';w.style.width='auto';const row=document.createElement('div');row.className='crow';
-  items.slice(0,8).forEach(it=>{const c=document.createElement('div');c.className='ccol';c.append(tape(it.p.name,'hider'),avatar(it.p,44,'hider'));row.appendChild(c)});
-  const lb=document.createElement('div');lb.className='rad';const b=document.createElement('b');b.textContent='.2 mile radius';lb.append(b,document.createTextNode(items.length+(items.length===1?' hider':' hiders')+', ping '+maxN+', '+ago(newest)));
-  w.append(row,lb);const W=Math.max(180,Math.min(items.length,8)*70);return L.divIcon({html:w,className:'',iconSize:[W,118],iconAnchor:[W/2,62]})}
-function drawMap(){if(!map)return;drawPings();drawLive();if(!fitted&&fitMap())fitted=true}
+// ---------- map ----------
+function initMap(){
+  map = L.map('map',{zoomControl:false}).setView([39,-98],4);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  L.control.zoom({position:'bottomleft'}).addTo(map);
+  layerPings = L.layerGroup().addTo(map);
+  layerLive = L.layerGroup().addTo(map);
+  setTimeout(()=>map.invalidateSize(),200);
+}
+function rot(id){ let h=0; for(const ch of String(id)) h=(h*31+ch.charCodeAt(0))|0; return ((Math.abs(h)%7)-3)+'deg'; }
+function tape(text, team, id){
+  const t=document.createElement('div'); t.className='tape '+(team==='hider'?'th':'ts'); t.textContent=text; t.style.setProperty('--rot', rot(id||text)); return t;
+}
+function pinIcon(p, tag, id){
+  const w=document.createElement('div'); w.className='pin';
+  const av=avatar(p,40,p.team); if(id===me.id) av.classList.add('self');
+  const tm=document.createElement('div'); tm.className='tm'; tm.textContent=tag;
+  w.append(tape(p.name,p.team,id), av, tm);
+  return L.divIcon({html:w, className:'', iconSize:[120,82], iconAnchor:[60,46]});
+}
+function clusterIcon(cl){
+  const w=document.createElement('div'); w.className='pinc';
+  const row=document.createElement('div'); row.className='crow';
+  const maxN = Math.max(...cl.items.map(i=>i.last.n));
+  cl.items.slice(0,8).forEach(it => {
+    const col=document.createElement('div'); col.className='ccol';
+    col.append(tape(it.p.name,'hider',it.id), avatar(it.p,44,'hider'));
+    if(it.last.n < maxN){ const t=document.createElement('div'); t.className='tm'; t.textContent='ping '+it.last.n; col.appendChild(t); }
+    row.appendChild(col);
+  });
+  const newest = Math.max(...cl.items.map(i=>i.last.ts)), k = cl.items.length;
+  const lb=document.createElement('div'); lb.className='rad';
+  const b=document.createElement('b'); b.textContent='.2 mile radius';
+  lb.append(b, document.createTextNode(k+(k===1?' hider':' hiders')+', ping '+maxN+', '+ago(newest)));
+  w.append(row, lb);
+  const width = Math.max(180, Math.min(k,8)*70);
+  return L.divIcon({html:w, className:'', iconSize:[width,118], iconAnchor:[width/2,62]});
+}
+function drawMap(){ if(!map) return; drawPings(); drawLive(); if(!fitted && fitMap()) fitted = true; }
+
+// hider pings: a 0.2-mile circle (never an exact dot) listing every hider inside it, with pictures and names
 function drawPings(){
-  layerP.clearLayers();
-  Object.values(state.locs).forEach(arr=>{const g=arr.filter(a=>!a.err&&a.clat!==undefined);if(!g.length)return;
-    if(g.length>1)L.polyline(g.map(a=>[a.clat,a.clng]),{color:HC,weight:2,opacity:.35,dashArray:'4 7',interactive:false}).addTo(layerP);
-    g.slice(0,-1).forEach(a=>L.circleMarker([a.clat,a.clng],{radius:3,color:HC,weight:1,fillOpacity:.4,interactive:false}).addTo(layerP))});
-  (state.areas||[]).forEach(ar=>{const c=[ar.clat,ar.clng],items=ar.m.map(x=>({id:x.id,p:state.players[x.id]||{name:'?'}}));
-    if(me.team==='hider'){L.circle(c,{radius:RAD,color:HC,weight:1.5,className:'area-ring',fillColor:HC,fillOpacity:.05,interactive:false}).addTo(layerP);
-      const lb=document.createElement('div');lb.className='rad dim';lb.textContent='Seekers see '+items.map(i=>i.p.name).join(', ')+' here';
-      L.marker(c,{icon:L.divIcon({html:lb,className:'',iconSize:[280,24],iconAnchor:[140,12]}),interactive:false}).addTo(layerP)}
-    else{L.circle(c,{radius:RAD,color:HC,weight:2.5,className:'area-ring',fillColor:HC,fillOpacity:.14,interactive:false}).addTo(layerP);
-      L.marker(c,{icon:clusterIcon(items,Math.max(...ar.m.map(x=>x.n)),Math.max(...ar.m.map(x=>x.ts))),interactive:false,zIndexOffset:300}).addTo(layerP)}});
+  layerPings.clearLayers();
+  Object.entries(state.locs).forEach(([id,arr]) => {
+    const good = arr.filter(a => !a.err && a.clat!==undefined); if(!good.length) return;
+    const pts = good.map(a=>[a.clat,a.clng]);
+    if(pts.length>1) L.polyline(pts,{color:HC,weight:2,opacity:.35,dashArray:'4 7',interactive:false}).addTo(layerPings);
+    good.slice(0,-1).forEach(a => L.circleMarker([a.clat,a.clng],{radius:3,color:HC,weight:1,fillOpacity:.4,interactive:false}).addTo(layerPings));
+  });
+  (state.areas||[]).forEach(ar => {
+    const c = [ar.clat, ar.clng];
+    const items = ar.m.map(x => ({id:x.id, p: state.players[x.id] || {name:'?'}, last:{n:x.n, ts:x.ts}}));
+    if(me.team==='hider'){        // hiders see their own team live; show them what the seekers were given
+      L.circle(c,{radius:RADIUS_M,color:HC,weight:1.5,className:'area-ring',fillColor:HC,fillOpacity:.05,interactive:false}).addTo(layerPings);
+      const lb=document.createElement('div'); lb.className='rad dim';
+      lb.textContent='Seekers see '+items.map(i=>i.p.name).join(', ')+' in this circle';
+      L.marker(c,{icon:L.divIcon({html:lb,className:'',iconSize:[280,24],iconAnchor:[140,12]}),interactive:false}).addTo(layerPings);
+    } else {
+      L.circle(c,{radius:RADIUS_M,color:HC,weight:2.5,className:'area-ring',fillColor:HC,fillOpacity:.14,interactive:false}).addTo(layerPings);
+      L.marker(c,{icon:clusterIcon({items}),interactive:false,zIndexOffset:300}).addTo(layerPings);
+    }
+  });
 }
+// live positions of my own team
 function drawLive(){
-  if(!layerL||!state)return;layerL.clearLayers();
-  Object.entries(live).forEach(([id,l])=>{const p=state.players[id];if(!p||p.off)return;const col=p.team==='hider'?HC:SC;
-    L.circle([l.lat,l.lng],{radius:Math.max(l.acc||8,5),color:col,weight:1,fillOpacity:.12,interactive:false}).addTo(layerL);
-    L.marker([l.lat,l.lng],{icon:pinIcon(p,id===me.id?'you':ago(l.ts),id),interactive:false,zIndexOffset:500}).addTo(layerL)})}
-function fitMap(){if(!map||!state)return false;const pts=[];Object.values(live).forEach(l=>pts.push([l.lat,l.lng]));
-  if(me.team==='seeker')(state.areas||[]).forEach(a=>pts.push([a.clat,a.clng]));if(meMarker)pts.push(meMarker.getLatLng());
-  if(pts.length===1)map.setView(pts[0],16);else if(pts.length>1)map.fitBounds(pts,{padding:[90,90]});return pts.length>0}
-$('fit').onclick=fitMap;
-$('locme').onclick=()=>getFix(p=>{const ll=[p.coords.latitude,p.coords.longitude];if(meMarker)meMarker.setLatLng(ll);else meMarker=L.circleMarker(ll,{radius:8,color:'#fff',weight:2,fillColor:'#3ecf8e',fillOpacity:1}).addTo(map);map.setView(ll,17)},c=>toast(geoHelp(c),9000));
-$('testLoc').onclick=()=>{const e=$('geoStatus');e.textContent='Checking…';getFix(p=>{e.textContent='Location works (within '+Math.round(p.coords.accuracy)+' m).'},c=>{e.textContent=geoHelp(c)})};
-$('share').onclick=async()=>{const url=location.origin+location.pathname+'?room='+me.code;try{if(navigator.share)await navigator.share({title:'Manhunt',text:'Join my manhunt game',url});else{await navigator.clipboard.writeText(url);toast('Invite link copied')}}catch(e){}};
+  if(!layerLive || !state) return;
+  layerLive.clearLayers();
+  Object.entries(live).forEach(([id,l]) => {
+    const p = state.players[id]; if(!p || p.off) return;
+    const col = p.team==='hider' ? HC : SC;
+    L.circle([l.lat,l.lng],{radius:Math.max(l.acc||8,5),color:col,weight:1,fillOpacity:.12,interactive:false}).addTo(layerLive);
+    L.marker([l.lat,l.lng],{icon:pinIcon(p, id===me.id ? 'you' : ago(l.ts), id),interactive:false,zIndexOffset:500}).addTo(layerLive);
+  });
+}
+function fitMap(){
+  if(!map || !state) return false;
+  const pts = [];
+  Object.values(live).forEach(l => pts.push([l.lat,l.lng]));
+  if(me.team==='seeker') (state.areas||[]).forEach(ar => pts.push([ar.clat,ar.clng]));
+  if(meMarker) pts.push(meMarker.getLatLng());
+  if(pts.length===1) map.setView(pts[0],16); else if(pts.length>1) map.fitBounds(pts,{padding:[90,90]});
+  return pts.length>0;
+}
+$('fit').onclick = fitMap;
+$('locme').onclick = () => {
+  getFix(p => {
+    const ll=[p.coords.latitude,p.coords.longitude];
+    if(meMarker) meMarker.setLatLng(ll); else meMarker=L.circleMarker(ll,{radius:8,color:'#fff',weight:2,fillColor:'#3ecf8e',fillOpacity:1}).bindTooltip('You (private, one-time)').addTo(map);
+    map.setView(ll,17);
+  }, code => toast(geoHelp(code), 9000));
+};
+$('testLoc').onclick = () => {
+  const el = $('geoStatus'); el.textContent = 'Checking…';
+  getFix(p => { el.textContent = 'Location works (within '+Math.round(p.coords.accuracy)+' m).'; },
+         code => { el.textContent = geoHelp(code); });
+};
+$('share').onclick = async () => {
+  const url = location.origin+location.pathname+'?room='+me.code;
+  try{ if(navigator.share) await navigator.share({title:'Manhunt',text:'Join my manhunt game',url}); else { await navigator.clipboard.writeText(url); toast('Invite link copied'); } }catch(e){}
+};
 
-/* ===== chat ===== */
-let chatOpen=false,chatTab='team';const chatSeen=new Set(),unread={team:0,all:0},lastChat={};
-function hostChat(pid,d){const p=state.players[pid];if(!p)return;const text=String(d.text||'').trim().slice(0,200);if(!text)return;const now=Date.now();if(now-(lastChat[pid]||0)<600)return;lastChat[pid]=now;
-  const scope=d.scope==='team'?'team':'all',m={id:now+'-'+Math.random().toString(36).slice(2,8),from:pid,name:p.name,team:p.team,scope,text,ts:now};
-  chatLog.push(m);if(chatLog.length>150)chatLog.shift();
-  Object.entries(conns).forEach(([cid,c])=>{if(scope==='all'||state.players[cid]?.team===p.team){try{c.send({t:'chat',m})}catch(e){}}});
-  if(scope==='all'||me.team===p.team)addChat(m)}
-function addChat(m,quiet){if(!m||chatSeen.has(m.id))return;if(m.scope==='team'&&m.team!==me.team)return;chatSeen.add(m.id);chatMsgs.push(m);if(chatMsgs.length>200)chatMsgs.shift();
-  const tab=m.scope==='team'?'team':'all';
-  if(!quiet&&m.from!==me.id){play('chat');notify(m.name,m.text.slice(0,100),'chat');if(navigator.vibrate)navigator.vibrate(80);if(!(chatOpen&&chatTab===tab)){unread[tab]++;toast(m.name+': '+m.text.slice(0,60),2500)}}
-  updateBadge();if(chatOpen)renderChat()}
-function updateBadge(){const n=unread.team+unread.all,b=$('chatBadge');b.textContent=n;b.classList.toggle('hidden',!n);$('dotTeam').classList.toggle('hidden',!unread.team);$('dotAll').classList.toggle('hidden',!unread.all)}
-function renderChat(){if(!state)return;unread[chatTab]=0;updateBadge();
-  $('tabTeamTxt').textContent=me.team==='hider'?'Hiders only':'Seekers only';$('tabTeam').className='tab '+(me.team==='hider'?'h':'s')+(chatTab==='team'?' on':'');$('tabAll').className='tab'+(chatTab==='all'?' on':'');
-  $('chatIn').placeholder=chatTab==='team'?'Message your team only':'Message everyone';
-  const list=$('chatList');list.innerHTML='';const shown=chatMsgs.filter(m=>chatTab==='all'?m.scope==='all':(m.scope==='team'&&m.team===me.team));
-  if(!shown.length){const e=document.createElement('div');e.className='empty';e.textContent=chatTab==='team'?'Only your team sees this chat.':'Everyone sees this chat.';list.appendChild(e)}
-  shown.forEach(m=>{const r=document.createElement('div');r.className='msg'+(m.from===me.id?' mine':'');r.appendChild(avatar(state.players[m.from]||{name:m.name},30,m.team));
-    const b=document.createElement('div');b.className='b';const w=document.createElement('div');w.className='who '+(m.team==='hider'?'h':'s');w.textContent=m.name;const t=document.createElement('div');t.textContent=m.text;b.append(w,t);r.appendChild(b);list.appendChild(r)});
-  list.scrollTop=list.scrollHeight}
-$('chatBtn').onclick=()=>{chatOpen=!chatOpen;$('chat').classList.toggle('hidden',!chatOpen);if(chatOpen){if(!unread.team&&unread.all)chatTab='all';renderChat()}};
-$('chatClose').onclick=()=>{chatOpen=false;$('chat').classList.add('hidden')};
-$('tabTeam').onclick=()=>{chatTab='team';renderChat()};$('tabAll').onclick=()=>{chatTab='all';renderChat()};
-$('chatForm').onsubmit=e=>{e.preventDefault();const text=$('chatIn').value.trim();if(!text)return;send({t:'chat',scope:chatTab,text});$('chatIn').value=''};
+// ---------- chat ----------
+// "team" messages go only to the sender's team; "all" messages go to everyone. The host relays and filters.
+let chatLog = [], chatMsgs = [], chatOpen = false, chatTab = 'team';
+const chatSeen = new Set(), unread = {team:0, all:0}, lastChat = {};
+function hostChat(pid, d){
+  const p = state.players[pid]; if(!p) return;
+  const text = String(d.text||'').trim().slice(0,200); if(!text) return;
+  const now = Date.now(); if(now-(lastChat[pid]||0) < 600) return; lastChat[pid] = now;
+  const scope = d.scope==='team' ? 'team' : 'all';
+  const m = {id: now+'-'+Math.random().toString(36).slice(2,8), from:pid, name:p.name, team:p.team, scope, text, ts:now};
+  chatLog.push(m); if(chatLog.length>150) chatLog.shift();
+  Object.entries(conns).forEach(([cid,c]) => { if(scope==='all' || state.players[cid]?.team===p.team){ try{ c.send({t:'chat', m}); }catch(e){} } });
+  if(scope==='all' || me.team===p.team) addChat(m);
+}
+function sendHistory(pid){
+  const c = conns[pid], p = state.players[pid]; if(!c || !p) return;
+  try{ c.send({t:'chathist', list: chatLog.filter(m => m.scope==='all' || m.team===p.team)}); }catch(e){}
+}
+function resetChatHost(){
+  chatLog = chatLog.filter(m => m.scope==='all');
+  Object.values(conns).forEach(c => { try{ c.send({t:'chatreset'}); }catch(e){} });
+  resetTeamChat();
+}
+function resetTeamChat(){ chatMsgs = chatMsgs.filter(m => m.scope==='all'); unread.team = 0; updateBadge(); if(chatOpen) renderChat(); }
+function addChat(m, quiet){
+  if(!m || chatSeen.has(m.id)) return;
+  if(m.scope==='team' && m.team!==me.team) return;
+  chatSeen.add(m.id); chatMsgs.push(m); if(chatMsgs.length>200) chatMsgs.shift();
+  const tab = m.scope==='team' ? 'team' : 'all';
+  if(!quiet && m.from!==me.id){
+    play('chat');
+    notify(m.name+(m.scope==='team'?' (team)':''), m.text.slice(0,100), 'chat');
+    if(navigator.vibrate) navigator.vibrate(80);
+  }
+  if(!quiet && m.from!==me.id && !(chatOpen && chatTab===tab)){ unread[tab]++; toast(m.name+': '+m.text.slice(0,60), 2500); }
+  updateBadge(); if(chatOpen) renderChat();
+}
+function updateBadge(){
+  const n = unread.team + unread.all, b = $('chatBadge');
+  b.textContent = n; b.classList.toggle('hidden', !n);
+  $('dotTeam').classList.toggle('hidden', !unread.team); $('dotAll').classList.toggle('hidden', !unread.all);
+}
+function renderChat(){
+  if(!state) return;
+  unread[chatTab] = 0; updateBadge();
+  $('tabTeamTxt').textContent = me.team==='hider' ? 'Hiders only' : 'Seekers only';
+  $('tabTeam').className = 'tab '+(me.team==='hider'?'h':'s')+(chatTab==='team'?' on':'');
+  $('tabAll').className = 'tab all'+(chatTab==='all'?' on':'');
+  $('chatIn').placeholder = chatTab==='team' ? 'Message your '+me.team+'s only' : 'Message everyone';
+  const list = $('chatList'); list.innerHTML = '';
+  const shown = chatMsgs.filter(m => chatTab==='all' ? m.scope==='all' : (m.scope==='team' && m.team===me.team));
+  if(!shown.length){ const e=document.createElement('div'); e.className='empty'; e.textContent = chatTab==='team' ? 'Only your team can see this chat.' : 'Everyone in the game can see this chat.'; list.appendChild(e); }
+  shown.forEach(m => {
+    const row = document.createElement('div'); row.className = 'msg'+(m.from===me.id?' mine':'');
+    row.appendChild(avatar(state.players[m.from] || {name:m.name}, 30, m.team));
+    const b = document.createElement('div'); b.className = 'b';
+    const w = document.createElement('div'); w.className = 'who '+(m.team==='hider'?'h':'s'); w.textContent = m.name;
+    const t = document.createElement('div'); t.textContent = m.text;
+    b.append(w, t); row.appendChild(b); list.appendChild(row);
+  });
+  list.scrollTop = list.scrollHeight;
+}
+function openChat(){
+  chatOpen = true; $('chat').classList.remove('hidden');
+  if(!unread.team && unread.all) chatTab = 'all';
+  renderChat();
+}
+$('chatBtn').onclick = () => chatOpen ? ($('chat').classList.add('hidden'), chatOpen=false) : openChat();
+$('chatClose').onclick = () => { chatOpen = false; $('chat').classList.add('hidden'); };
+$('tabTeam').onclick = () => { chatTab = 'team'; renderChat(); };
+$('tabAll').onclick = () => { chatTab = 'all'; renderChat(); };
+$('chatForm').onsubmit = e => {
+  e.preventDefault();
+  const text = $('chatIn').value.trim(); if(!text) return;
+  send({t:'chat', scope: chatTab==='team' ? 'team' : 'all', text});
+  $('chatIn').value = '';
+};
 
-/* ===== team radio ===== */
-function onCall(call){const p=state&&state.players[call.peer];if(!p||p.team!==me.team){call.close();return}call.answer(localStream);wireCall(call)}
-function wireCall(call){calls[call.peer]=call;
-  call.on('stream',st=>{let a=audioEls[call.peer];if(!a){a=document.createElement('audio');a.autoplay=true;a.setAttribute('playsinline','');$('audios').appendChild(a);audioEls[call.peer]=a}a.srcObject=st;a.play().catch(()=>{})});
-  const drop=()=>{if(calls[call.peer]===call)delete calls[call.peer];const a=audioEls[call.peer];if(a){a.remove();delete audioEls[call.peer]}};call.on('close',drop);call.on('error',drop)}
-function syncCalls(){if(!state||!localStream||!peer)return;
-  Object.entries(calls).forEach(([id,c])=>{const p=state.players[id];if(!p||p.off||p.team!==me.team){c.close();delete calls[id];const a=audioEls[id];if(a){a.remove();delete audioEls[id]}}});
-  Object.entries(state.players).forEach(([id,p])=>{if(id===me.id||p.off||p.team!==me.team||calls[id])return;if(me.id<id){const c=peer.call(id,localStream);if(c)wireCall(c)}})}
-function talk(on){if(!localStream)return;localStream.getAudioTracks().forEach(t=>t.enabled=on);$('ptt').classList.toggle('live',on);$('pttTxt').textContent=on?'On air':'Hold to talk';if(navigator.vibrate)navigator.vibrate(on?20:0)}
-const ptt=$('ptt');ptt.addEventListener('pointerdown',e=>{e.preventDefault();ptt.setPointerCapture(e.pointerId);talk(true)});
-['pointerup','pointercancel'].forEach(ev=>ptt.addEventListener(ev,()=>talk(false)));ptt.addEventListener('contextmenu',e=>e.preventDefault());
+// ---------- team voice (walkie-talkie) ----------
+function onCall(call){
+  if(call.metadata && call.metadata.kind==='cam'){          // someone is showing their camera
+    if(!state || !$('camAllow').checked){ call.close(); return; }
+    call.answer(); wireCam(call); return;
+  }
+  const p = state && state.players[call.peer];
+  if(!p || p.team!==me.team){ call.close(); return; }
+  call.answer(localStream); wireCall(call);
+}
+function wireCall(call){
+  calls[call.peer] = call;
+  call.on('stream', st => {
+    let a = audioEls[call.peer];
+    if(!a){ a=document.createElement('audio'); a.autoplay=true; a.setAttribute('playsinline',''); $('audios').appendChild(a); audioEls[call.peer]=a; }
+    a.srcObject = st; a.play().catch(()=>{});
+  });
+  const drop = () => { if(calls[call.peer]===call) delete calls[call.peer]; const a=audioEls[call.peer]; if(a){ a.remove(); delete audioEls[call.peer]; } };
+  call.on('close', drop); call.on('error', drop);
+}
+function syncCalls(){
+  if(!state || !localStream || !peer) return;
+  Object.entries(calls).forEach(([id,c]) => { const p=state.players[id]; if(!p || p.off || p.team!==me.team){ c.close(); delete calls[id]; const a=audioEls[id]; if(a){a.remove(); delete audioEls[id];} } });
+  Object.entries(state.players).forEach(([id,p]) => {
+    if(id===me.id || p.off || p.team!==me.team || calls[id]) return;
+    if(me.id < id){ const c = peer.call(id, localStream); if(c) wireCall(c); }
+  });
+}
+function talk(on){
+  if(!localStream) return;
+  localStream.getAudioTracks().forEach(t => t.enabled = on);
+  $('ptt').classList.toggle('live', on);
+  $('pttTxt').textContent = on ? 'On air' : 'Hold to talk';
+  if(navigator.vibrate) navigator.vibrate(on?20:0);
+}
+const ptt = $('ptt');
+ptt.addEventListener('pointerdown', e => { e.preventDefault(); ptt.setPointerCapture(e.pointerId); talk(true); });
+['pointerup','pointercancel'].forEach(ev => ptt.addEventListener(ev, () => talk(false)));
+ptt.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('keydown', e => { if(e.code==='Space' && !e.repeat && document.activeElement.tagName!=='INPUT' && document.activeElement.tagName!=='BUTTON'){ e.preventDefault(); talk(true);} });
+document.addEventListener('keyup', e => { if(e.code==='Space') talk(false); });
 
-/* ===== auto-resume after reload or discarded tab (host restores the saved game) ===== */
-(function(){try{const s=JSON.parse(store.get('mh_sess')||'null'),want=params.get('room')?params.get('room').toUpperCase():null;
-  if(s&&s.code&&Date.now()-s.ts<12*3600e3&&(!want||want===s.code)){resumed=true;me.name=store.get('mh_name')||'Player';toast('Rejoining '+s.code+'…',5000);
-    if(s.host){let r=null;try{r=JSON.parse(store.get('mh_host')||'null')}catch(e){}startHost(s.code,r)}
-    else{$('code').value=s.code;doJoin()}
-    setTimeout(()=>{resumed=false},8000)}}catch(e){}})();
-</script></body></html>
+// ---------- cameras + recording ----------
+// Show-my-camera: I call each player in the chosen audience with my camera stream. They answer receive-only,
+// so nothing flows back. Recording uses MediaRecorder and hands the file to the phone as a download / share sheet.
+let camStream = null, camAud = null, camFacing = 'environment', camOpen = false, selfRec = null, screenRec = null, screenStream = null;
+const camOut = {}, camIn = {}, camSkip = {};
+
+function setAud(a){
+  camAud = a;
+  document.querySelectorAll('#aud button').forEach(b => b.classList.toggle('on', b.dataset.a===a));
+  if(camStream) syncCam();
+}
+document.querySelectorAll('#aud button').forEach(b => b.onclick = () => { Object.keys(camSkip).forEach(k => delete camSkip[k]); setAud(b.dataset.a); });
+function openCam(){ camOpen = true; $('cam').classList.remove('hidden'); if(!camAud) setAud(me.team==='hider' ? 'seeker' : 'hider'); }
+function closeCam(){ camOpen = false; $('cam').classList.add('hidden'); }
+$('camBtn').onclick = () => camOpen ? closeCam() : openCam();
+$('camClose').onclick = closeCam;
+if(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) $('recScreen').classList.remove('hidden');
+
+function audMatch(p){ if(!p || p.off) return false; if(camAud==='none') return false; if(camAud==='all') return true; return p.team===camAud; }
+function syncCam(){
+  if(!camStream || !peer || !state) return;
+  Object.entries(camOut).forEach(([id,c]) => { if(!audMatch(state.players[id])){ try{ c.close(); }catch(e){} delete camOut[id]; } });
+  Object.entries(state.players).forEach(([id,p]) => {
+    if(p.off) delete camSkip[id];                      // they dropped and came back: offer again
+    if(id===me.id || camOut[id] || camSkip[id] || !audMatch(p)) return;
+    try{
+      const c = peer.call(id, camStream, {metadata:{kind:'cam', name:me.name, team:me.team}});
+      if(!c) return;
+      camOut[id] = c;
+      const gone = () => { if(camOut[id]===c){ delete camOut[id]; camSkip[id] = true; } };   // they closed it: don't keep pestering
+      c.on('close', gone); c.on('error', gone);
+    }catch(e){}
+  });
+}
+async function startCam(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('This browser has no camera support'); return; }
+  const vid = {facingMode:{ideal:camFacing}, width:{ideal:1280}, height:{ideal:720}};
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({video:vid, audio: $('camSound').checked ? {echoCancellation:true, noiseSuppression:true} : false});
+  }catch(e){
+    try{ camStream = await navigator.mediaDevices.getUserMedia({video:vid, audio:false}); if($('camSound').checked) toast('Camera started without sound (mic was unavailable)'); }
+    catch(e2){ toast('Camera blocked. Allow camera access for this site in your browser settings.', 6000); return; }
+  }
+  camStream.getVideoTracks().forEach(t => t.addEventListener('ended', stopCam));
+  const v = $('camSelf'); v.srcObject = camStream; v.classList.toggle('mirror', camFacing==='user'); v.play().catch(()=>{});
+  Object.keys(camSkip).forEach(k => delete camSkip[k]);
+  updateCamUI(); syncCam(); keepAwake();
+}
+function stopCam(){
+  if(selfRec){ try{ selfRec.stop(); }catch(e){} selfRec = null; }
+  Object.values(camOut).forEach(c => { try{ c.close(); }catch(e){} });
+  Object.keys(camOut).forEach(k => delete camOut[k]);
+  if(camStream){ camStream.getTracks().forEach(t => { try{ t.stop(); }catch(e){} }); camStream = null; }
+  $('camSelf').srcObject = null; updateCamUI();
+}
+async function flipCam(){
+  if(!camStream) return;
+  camFacing = camFacing==='environment' ? 'user' : 'environment';
+  const wasRec = !!selfRec; stopCam(); await startCam();
+  if(wasRec) toast('Camera flipped. Recording was saved; start a new one.');
+}
+function updateCamUI(){
+  const on = !!camStream;
+  $('camToggle').textContent = on ? 'Stop camera' : 'Start camera';
+  $('camToggle').classList.toggle('recording', on);
+  $('camFlip').classList.toggle('hidden', !on);
+  $('camSelf').classList.toggle('hidden', !on);
+  $('recSelf').classList.toggle('hidden', !on);
+  $('recSelf').textContent = selfRec ? 'Stop recording' : 'Record my camera';
+  $('recSelf').classList.toggle('recording', !!selfRec);
+  $('recScreen').textContent = screenRec ? 'Stop screen recording' : 'Record screen';
+  $('recScreen').classList.toggle('recording', !!screenRec);
+}
+$('camToggle').onclick = () => camStream ? stopCam() : startCam();
+$('camFlip').onclick = flipCam;
+
+// ---- viewing other people's cameras ----
+function wireCam(call){
+  const key = call.peer, name = (call.metadata && call.metadata.name) || (state.players[key] && state.players[key].name) || 'Player';
+  const old = camIn[key]; if(old){ try{ old.call.close(); }catch(e){} removeTile(key); }
+  camIn[key] = {call, name, stream:null, rec:null, tile:null};
+  call.on('stream', st => {
+    const e = camIn[key]; if(!e || e.call!==call) return;
+    e.stream = st;
+    if(e.tile){ e.tile.querySelector('video').srcObject = st; return; }
+    buildTile(key, st);
+    play('chat'); toast(name+' is showing their camera', 4000);
+    notify('Camera', name+' is showing their camera', 'cam');
+    openCam(); updateCamBadge();
+  });
+  const drop = () => { const e = camIn[key]; if(e && e.call===call){ if(e.rec){ try{ e.rec.stop(); }catch(_){} } removeTile(key); delete camIn[key]; updateCamBadge(); } };
+  call.on('close', drop); call.on('error', drop);
+}
+function buildTile(key, st){
+  const e = camIn[key];
+  const tile = document.createElement('div'); tile.className = 'camtile';
+  const ct = document.createElement('div'); ct.className = 'ct';
+  const dot = document.createElement('i'); dot.className = 'dot';
+  const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = e.name+"'s camera";
+  ct.append(dot, nm);
+  const v = document.createElement('video'); v.playsInline = true; v.autoplay = true; v.srcObject = st;
+  v.play().catch(() => { v.muted = true; v.play().catch(()=>{}); toast('Tap the video to turn sound on'); });
+  v.onclick = () => { v.muted = !v.muted; };
+  const cr = document.createElement('div'); cr.className = 'cr';
+  const rb = document.createElement('button'); rb.className = 'btn ghost sm'; rb.textContent = 'Record this';
+  rb.onclick = () => {
+    if(e.rec){ try{ e.rec.stop(); }catch(_){} return; }
+    e.rec = startRec(e.stream, e.name.replace(/\W+/g,'')+'-cam', on => { if(!on) e.rec = null; rb.textContent = on ? 'Stop recording' : 'Record this'; rb.classList.toggle('recording', on); });
+  };
+  const xb = document.createElement('button'); xb.className = 'btn ghost sm'; xb.textContent = 'Close';
+  xb.onclick = () => { try{ e.call.close(); }catch(_){} };
+  cr.append(rb, xb);
+  tile.append(ct, v, cr); e.tile = tile; $('camIn').appendChild(tile);
+}
+function removeTile(key){ const e = camIn[key]; if(e && e.tile){ e.tile.remove(); e.tile = null; } }
+function updateCamBadge(){ const n = Object.keys(camIn).length, b = $('camBadge'); b.textContent = n; b.classList.toggle('hidden', !n); }
+
+// ---- recording ----
+function pickMime(){
+  const c = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+  for(const m of c){ try{ if(MediaRecorder.isTypeSupported(m)) return m; }catch(e){} }
+  return '';
+}
+function startRec(stream, label, onState){
+  if(!stream){ toast('Nothing to record yet'); return null; }
+  if(!window.MediaRecorder){ toast('Recording is not supported in this browser'); return null; }
+  const mime = pickMime(); let rec;
+  try{ rec = new MediaRecorder(stream, mime ? {mimeType:mime} : undefined); }catch(e){ toast('Could not start recording'); return null; }
+  const chunks = [];
+  rec.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    const type = rec.mimeType || mime || 'video/webm';
+    if(chunks.length) addRecording(new Blob(chunks, {type}), label, type); else toast('Recording was empty');
+    onState && onState(false);
+  };
+  rec.start(1000); onState && onState(true);
+  return rec;
+}
+function addRecording(blob, label, type){
+  const ext = type.includes('mp4') ? 'mp4' : 'webm';
+  const name = 'manhunt-'+label+'-'+new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)+'.'+ext;
+  const url = URL.createObjectURL(blob);
+  const row = document.createElement('div'); row.className = 'rec';
+  const t = document.createElement('div'); t.className = 'rn'; t.textContent = name+' ('+(blob.size/1048576).toFixed(1)+' MB)';
+  const a = document.createElement('a'); a.className = 'btn sm'; a.textContent = 'Save again'; a.href = url; a.download = name;
+  row.append(t, a);
+  try{
+    const f = new File([blob], name, {type});
+    if(navigator.canShare && navigator.canShare({files:[f]})){
+      const s = document.createElement('button'); s.className = 'btn ghost sm'; s.textContent = 'Share / Photos';
+      s.onclick = () => navigator.share({files:[f], title:'Manhunt recording'}).catch(()=>{});
+      row.appendChild(s);
+    }
+  }catch(e){}
+  $('recs').prepend(row);
+  try{ a.click(); }catch(e){}                       // try to save straight away; the buttons are there if the phone blocks it
+  toast('Recording saved. If it did not download, tap Save or Share in the Cameras panel.', 6000);
+  if(!camOpen) openCam();
+}
+$('recSelf').onclick = () => {
+  if(selfRec){ try{ selfRec.stop(); }catch(e){} return; }
+  selfRec = startRec(camStream, 'my-camera', on => { if(!on) selfRec = null; updateCamUI(); });
+  updateCamUI();
+};
+$('recScreen').onclick = async () => {
+  if(screenRec){ try{ screenRec.stop(); }catch(e){} return; }
+  try{
+    screenStream = await navigator.mediaDevices.getDisplayMedia({video:true, audio:true});
+  }catch(e){ toast('Screen recording was cancelled or is not allowed'); return; }
+  screenStream.getVideoTracks()[0].addEventListener('ended', () => { if(screenRec){ try{ screenRec.stop(); }catch(e){} } });
+  screenRec = startRec(screenStream, 'screen', on => {
+    if(!on){ screenRec = null; if(screenStream){ screenStream.getTracks().forEach(t => t.stop()); screenStream = null; } }
+    updateCamUI();
+  });
+  updateCamUI();
+};
+
+// ---------- auto-resume ----------
+// If the phone discarded the tab (or you reloaded), reopening the site puts you straight back into your room.
+(function(){
+  try{
+    const s = JSON.parse(store.get('mh_sess')||'null');
+    const want = params.get('room') ? params.get('room').toUpperCase() : null;
+    if(s && s.code && Date.now()-s.ts < 12*3600e3 && (!want || want===s.code)){
+      $('code').value = s.code; resumed = true;
+      toast('Rejoining '+s.code+'…', 5000);
+      doJoin().then(() => setTimeout(() => { resumed = false; }, 8000));
+    }
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
