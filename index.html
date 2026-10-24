@@ -363,7 +363,7 @@ input[type=text],input[type=number]{font-size:22px;min-height:48px}
     <input type="text" id="code" class="codeIn" maxlength="4" placeholder="ABCD" autocomplete="off">
     <label class="l" for="pass">Passcode (from the host)</label><input type="text" id="pass" class="codeIn" maxlength="6" inputmode="numeric" autocomplete="off" placeholder="000000">
     <button class="btn ghost" id="joinbtn" style="margin-top:14px">Join game</button></div>
-  <p class="small"><b>How it works.</b> Hiders see every seeker live. Seekers only see a rough 0.2 mile circle around hiders each ping. One minute after each ping, every hider’s camera takes a photo that goes to the seekers with the hider’s name. Hiders: allow the camera when asked.</p>
+  <p class="small"><b>How it works.</b> Everyone sees seekers live. Seekers never see a hider's live dot. They only get a rough 0.2 mile circle around hiders each ping. One minute after each ping, every hider’s camera takes a photo that goes to the seekers with the hider’s name. Hiders: allow the camera when asked.</p>
   <p class="small"><b>Background.</b> Keep the Manhunt tab open and switch apps or lock the screen. Do not swipe it away. A closed page cannot run, no browser allows that.</p>
 </div></section>
 
@@ -386,7 +386,7 @@ input[type=text],input[type=number]{font-size:22px;min-height:48px}
     <div id="grab"></div>
     <div id="teambar"><div class="av" id="meAv" style="width:40px;height:40px"></div><div id="teamTxt"></div><label class="btn ghost sm" style="cursor:pointer;margin:0">Photo<input type="file" id="picIn2" accept="image/*" hidden></label></div>
     <button class="btn ghost hidden" id="adminSwitch" style="margin-top:10px">Admin: switch team</button><div id="rule"></div>
-    <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="liveToggle" checked>Share my live location (hiders see seekers, teams see teammates)</label>
+    <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="liveToggle" checked>Share my live location (seekers show live to everyone, hiders only show live to other hiders)</label>
     <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="soundToggle" checked>Game sounds</label>
     <div id="lobbyBox">
       <div class="row" style="margin-top:6px"><button class="btn ghost" id="testLoc">Test location</button><button class="btn ghost" id="testSnd">Test sounds</button></div>
@@ -462,41 +462,154 @@ const store={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},s
 const uid=(()=>{let u=store.get('mh_uid');if(!u){u=Math.random().toString(36).slice(2,10);store.set('mh_uid',u)}return u})();
 const secureOk=window.isSecureContext&&location.protocol!=='file:'; if(!secureOk)$('insecure').classList.remove('hidden');
 
+/* ===== WHO SEES WHOSE LIVE LOCATION =====
+   Seekers are visible live to everyone (seekers and hiders).
+   Hiders are visible live only to other hiders. Seekers never get a hider's live dot,
+   only the fuzzed 0.2 mile circle that appears on each ping. */
+const canSeeLive=(viewerTeam,subjectTeam)=>subjectTeam==='seeker'||viewerTeam==='hider';
+
 function toast(m,ms=3500){const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.add('hidden'),ms)}
 const fmt=ms=>{ms=Math.max(0,Math.ceil(ms/1000));return String(Math.floor(ms/60)).padStart(2,'0')+':'+String(ms%60).padStart(2,'0')};
 const ago=ts=>{const s=Math.max(0,Math.round((Date.now()+skew-ts)/1000));return s<60?s+'s ago':Math.round(s/60)+' min ago'};
 async function getMic(){try{localStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});localStream.getAudioTracks().forEach(t=>t.enabled=false)}catch(e){localStream=new MediaStream();$('micnote').textContent='Mic unavailable. You can listen but not talk.'}}
 
-/* ===== SOUND ENGINE: compressor + generated reverb, layered synth voices ===== */
-let A=null,master,keepEl=null,sched=[],schedKey=null,schedPingAt=0;
+/* ===== SOUND ENGINE =====
+   Layered synthesis, not beeps: FM bells with inharmonic partials, sub-bass thumps, filtered noise transients,
+   detuned saw stacks sweeping through lowpass filters, a generated dark stereo room reverb, a filtered
+   ping-pong echo, tanh saturation and a bus compressor so everything glues together. */
+let A=null,master,dry,wetIn,noiseBuf,keepEl=null,sched=[],schedKey=null,schedPingAt=0,talking=false;
 const sndOn=()=>$('soundToggle').checked;
+function makeIR(sec,decay){
+  const sr=A.sampleRate,n=sr*sec|0,b=A.createBuffer(2,n,sr);
+  for(let c=0;c<2;c++){const d=b.getChannelData(c);let lp=0;
+    for(let i=0;i<n;i++){const k=i/n,a=.08+.8*Math.pow(1-k,2);lp+=a*((Math.random()*2-1)-lp);
+      d[i]=lp*Math.pow(1-k,decay)*Math.min(1,i/(sr*.01))*2.2}}   // tail gets darker as it fades, like a real room
+  return b}
 function audio(){
   try{
-    if(!A){A=new(window.AudioContext||window.webkitAudioContext)();master=A.createGain();master.gain.value=.85;
-      const comp=A.createDynamicsCompressor(),verb=A.createConvolver(),wet=A.createGain();wet.gain.value=.4;
-      const n=A.sampleRate*2|0,b=A.createBuffer(2,n,A.sampleRate);
-      for(let c=0;c<2;c++){const d=b.getChannelData(c);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,3)}
-      verb.buffer=b;master.connect(comp);master.connect(verb);verb.connect(wet);wet.connect(comp);comp.connect(A.destination)}
+    if(!A){
+      A=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+      master=A.createGain();master.gain.value=.9;
+      const sat=A.createWaveShaper(),cv=new Float32Array(1024);
+      for(let i=0;i<1024;i++){const x=i/512-1;cv[i]=Math.tanh(x*1.6)/Math.tanh(1.6)}
+      sat.curve=cv;sat.oversample='2x';
+      const comp=A.createDynamicsCompressor();comp.threshold.value=-16;comp.knee.value=18;comp.ratio.value=3.5;comp.attack.value=.004;comp.release.value=.22;
+      const hp=A.createBiquadFilter();hp.type='highpass';hp.frequency.value=26;
+      master.connect(sat);sat.connect(hp);hp.connect(comp);comp.connect(A.destination);
+      dry=A.createGain();dry.connect(master);
+      wetIn=A.createGain();
+      const pre=A.createDelay(.1);pre.delayTime.value=.022;
+      const verb=A.createConvolver();verb.buffer=makeIR(2.8,2.4);
+      const vg=A.createGain();vg.gain.value=.55;
+      wetIn.connect(pre);pre.connect(verb);verb.connect(vg);vg.connect(master);
+      const dl=A.createDelay(1),dr=A.createDelay(1),fb=A.createGain(),tn=A.createBiquadFilter(),eg=A.createGain(),mg=A.createChannelMerger(2);
+      dl.delayTime.value=.34;dr.delayTime.value=.51;fb.gain.value=.38;tn.type='lowpass';tn.frequency.value=2600;eg.gain.value=.3;
+      wetIn.connect(dl);dl.connect(tn);tn.connect(dr);dr.connect(fb);fb.connect(dl);
+      dl.connect(mg,0,0);dr.connect(mg,0,1);mg.connect(eg);eg.connect(master);
+      noiseBuf=A.createBuffer(1,A.sampleRate*2,A.sampleRate);
+      const nd=noiseBuf.getChannelData(0);for(let i=0;i<nd.length;i++)nd[i]=Math.random()*2-1;
+    }
     if(A.state!=='running')A.resume();
   }catch(e){}
   keepAlive();
 }
-function tone(t,f0,f1,d,v,ty,det){const o=A.createOscillator(),g=A.createGain();o.type=ty||'sine';o.detune.value=det||0;o.frequency.setValueAtTime(f0,t);
-  if(f1&&f1!==f0)o.frequency.exponentialRampToValueAtTime(f1,t+d);
-  g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+.012);g.gain.exponentialRampToValueAtTime(.0001,t+d);
-  o.connect(g);g.connect(master);o.start(t);o.stop(t+d+.05);return o}
-function noise(t,d,v,f,q){const n=A.sampleRate*d|0,b=A.createBuffer(1,n,A.sampleRate),x=b.getChannelData(0);
-  for(let i=0;i<n;i++)x[i]=(Math.random()*2-1)*(1-i/n);
-  const s=A.createBufferSource(),fl=A.createBiquadFilter(),g=A.createGain();s.buffer=b;fl.type='bandpass';fl.frequency.value=f;fl.Q.value=q||1;g.gain.value=v;
-  s.connect(fl);fl.connect(g);g.connect(master);s.start(t);return s}
+const V=()=>({s:[],stop(){this.s.forEach(x=>{try{x.stop()}catch(e){}})}});
+function route(n,send,pan){
+  let o=n;
+  if(pan&&A.createStereoPanner){const p=A.createStereoPanner();p.pan.value=pan;n.connect(p);o=p}
+  o.connect(dry);
+  if(send){const s=A.createGain();s.gain.value=send;o.connect(s);s.connect(wetIn)}
+}
+// one tonal voice: oscillator with envelope, optional pitch sweep, lowpass sweep, FM modulator
+function note(v,t,o){
+  const os=A.createOscillator(),g=A.createGain(),d=o.d,a=o.a||.004,pk=o.g||.3;
+  os.type=o.type||'sine';os.frequency.setValueAtTime(o.f,t);
+  if(o.f2)os.frequency.exponentialRampToValueAtTime(o.f2,t+(o.sl||d));
+  if(o.det)os.detune.value=o.det;
+  g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(pk,t+a);g.gain.exponentialRampToValueAtTime(.0001,t+d);
+  let n=os;
+  if(o.lp){const f=A.createBiquadFilter();f.type='lowpass';f.Q.value=o.q||.7;f.frequency.setValueAtTime(o.lp,t);f.frequency.exponentialRampToValueAtTime(o.lp2||o.lp,t+d);os.connect(f);n=f}
+  n.connect(g);v.s.push(os);os.start(t);os.stop(t+d+.05);
+  if(o.fm){const m=A.createOscillator(),mg=A.createGain();m.frequency.value=o.f*o.fm[0];
+    mg.gain.setValueAtTime(o.f*o.fm[0]*o.fm[1],t);mg.gain.exponentialRampToValueAtTime(.01,t+d*.7);   // bright strike that mellows out
+    m.connect(mg);mg.connect(os.frequency);v.s.push(m);m.start(t);m.stop(t+d+.05)}
+  route(g,o.send||0,o.pan||0);
+}
+// one filtered noise voice: clicks, air, whooshes, thuds
+function hiss(v,t,o){
+  const s=A.createBufferSource(),f=A.createBiquadFilter(),g=A.createGain(),d=o.d,a=o.a||.002;
+  s.buffer=noiseBuf;s.loop=true;f.type=o.type||'bandpass';f.Q.value=o.q||1;
+  f.frequency.setValueAtTime(o.f,t);if(o.f2)f.frequency.exponentialRampToValueAtTime(o.f2,t+d);
+  g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(o.g||.3,t+a);g.gain.exponentialRampToValueAtTime(.0001,t+d);
+  s.connect(f);f.connect(g);v.s.push(s);s.start(t,Math.random()*1.5);s.stop(t+d+.05);
+  route(g,o.send||0,o.pan||0);
+}
 const SND={
-  ping:t=>[tone(t,1320,1300,1.6,.45),tone(t,1328,1320,1.6,.25),tone(t+.32,880,870,1.3,.28),tone(t,80,40,.6,.8),noise(t,.25,.3,2500,2)],
-  snap:t=>[noise(t,.05,.9,3200,.8),noise(t+.08,.07,.7,1800,.8),...[523,659,784,1047].map((f,i)=>tone(t+.22+i*.07,f,f,.35,.22,'triangle'))],
-  chat:t=>[tone(t,1175,1175,.12,.25),tone(t+.09,1568,1568,.2,.22)],
-  tick:(t,last)=>[tone(t,last?1760:1040,last?1760:1040,last?.6:.07,last?.5:.3,'triangle'),noise(t,.02,.4,4000,1)],
-  hide:t=>[tone(t,45,38,1.8,.9),tone(t,110,55,1.4,.3,'sawtooth',-12),tone(t+.02,110,55,1.4,.3,'sawtooth',12),tone(t+1.1,220,220,.7,.25,'triangle'),noise(t,1.2,.2,300,.7)],
-  seek:t=>[tone(t,200,1400,.9,.3,'sawtooth'),tone(t+.9,1400,500,.5,.2,'sawtooth'),...[523,659,784].map(f=>tone(t+1.3,f,f,1.1,.2,'triangle')),noise(t,.9,.15,2000,.6)],
-  over:t=>[784,659,523,392].map((f,i)=>tone(t+i*.2,f,f,.7,.3,'triangle'))
+  // sonar ping: glassy long ring, inharmonic bell partials, FM body, sub thump, echoes bounce off the room
+  ping(t){const v=V(),f=1480;
+    note(v,t,{f,f2:f*.995,d:3,g:.34,a:.003,send:.6,pan:-.1});
+    note(v,t,{f:f*1.003,d:2.2,g:.14,send:.5,pan:.15,det:6});
+    note(v,t,{f:f*2.76,d:1.3,g:.08,send:.7});
+    note(v,t,{f:f*5.4,d:.45,g:.04,send:.5});
+    note(v,t,{f:f/2,d:1.8,g:.16,fm:[3.5,1.8],send:.6});
+    note(v,t,{f:95,f2:34,sl:.45,d:.7,g:.75,a:.003});
+    hiss(v,t,{f:3400,q:.9,d:.09,g:.22,send:.3});
+    return v},
+  // countdown tick: soft wood tap that tightens and rises in the last 3 seconds
+  tick(t,k){const v=V(),u=k<=3,p=1700+(u?(4-k)*170:0),vol=u?.34:.22;
+    note(v,t,{f:p,f2:p*.8,sl:.04,d:.07,g:vol,a:.001,send:.12});
+    note(v,t,{f:p*.5,d:.09,g:vol*.5,a:.001});
+    hiss(v,t,{f:3200,q:3,d:.025,g:.3});
+    if(u)note(v,t,{f:75,f2:48,sl:.14,d:.2,g:.3,a:.003});
+    return v},
+  // camera shutter: two mechanical clicks, a spring tail, then a soft glass confirm
+  snap(t){const v=V();
+    hiss(v,t,{f:4500,q:.7,d:.03,g:.8,send:.15});note(v,t,{f:170,f2:60,sl:.07,d:.09,g:.5,a:.002});
+    hiss(v,t+.07,{f:2200,q:1,d:.05,g:.6,send:.1});note(v,t+.07,{f:120,f2:50,sl:.07,d:.1,g:.45,a:.002});
+    hiss(v,t+.1,{f:6200,f2:3000,q:2,d:.18,g:.07});
+    note(v,t+.26,{f:1568,d:.9,g:.11,send:.6,pan:-.2,fm:[2.76,.8]});
+    note(v,t+.34,{f:2093,d:1,g:.09,send:.6,pan:.2,fm:[2.76,.8]});
+    return v},
+  // chat: a droplet blip with a marimba-ish overtone
+  chat(t){const v=V();
+    note(v,t,{f:740,f2:1130,sl:.06,d:.28,g:.2,a:.003,send:.3});
+    note(v,t+.07,{f:1480,d:.22,g:.07,send:.4,pan:.2});
+    note(v,t,{f:2040,d:.05,g:.05,a:.001});
+    return v},
+  // HIDE reveal: sub drone, detuned saws breathing through a lowpass, heartbeat, reversed-style noise swell, eerie high glass
+  hide(t){const v=V();
+    note(v,t,{f:41,d:3.4,g:.6,a:.4});
+    note(v,t,{f:82.4,type:'sawtooth',det:-9,d:3,g:.14,a:.7,lp:160,lp2:900,q:2,send:.5});
+    note(v,t,{f:82.4,type:'sawtooth',det:9,d:3,g:.14,a:.7,lp:160,lp2:900,q:2,send:.5});
+    note(v,t,{f:123.5,type:'triangle',d:2.8,g:.1,a:.9,lp:600,send:.6});
+    [[.15,.9],[.47,.7],[1.35,.6],[1.67,.45]].forEach(([dt,g])=>{
+      note(v,t+dt,{f:72,f2:32,sl:.22,d:.4,g,a:.004});
+      hiss(v,t+dt,{type:'lowpass',f:260,d:.18,g:g*.5})});
+    hiss(v,t,{f:180,f2:2600,q:1.4,a:1.3,d:1.6,g:.16,send:.5});
+    note(v,t+.9,{f:1244.5,d:2.4,g:.045,a:.9,fm:[1.41,1.2],send:.9,pan:.3});
+    return v},
+  // SEEK reveal: rising saw stack and noise riser, then a huge impact with a minor stab
+  seek(t){const v=V(),i=t+.97;
+    [-14,0,14].forEach(dt=>note(v,t,{f:110,f2:440,sl:.95,type:'sawtooth',det:dt,d:1,g:.1,a:.85,lp:350,lp2:5200,q:3,send:.3}));
+    hiss(v,t,{f:300,f2:7000,q:1.6,a:.88,d:.98,g:.22,send:.3});
+    note(v,t,{f:880,f2:1760,sl:.95,d:1,g:.03,a:.9,fm:[2,1.5],send:.5});
+    note(v,i,{f:120,f2:30,sl:1.6,d:2,g:.9,a:.004});
+    hiss(v,i,{type:'lowpass',f:2400,f2:90,q:.7,d:.7,g:.55,send:.6});
+    [220,329.6,440,523.25].forEach((f,j)=>note(v,i,{f,type:'sawtooth',det:j%2?7:-7,d:1.5,g:.07,lp:3200,lp2:350,send:.55,pan:(j-1.5)*.35}));
+    note(v,i,{f:1760,d:1.8,g:.06,fm:[2.76,2],send:.8});
+    return v},
+  // game over: warm detuned pad resolving to a major chord with a bell on top
+  over(t){const v=V();
+    [293.66,369.99,440,554.37].forEach((f,j)=>{const s=t+j*.14;
+      note(v,s,{f,type:'triangle',det:-6,d:3.2,g:.09,a:.3,lp:1900,send:.7,pan:(j-1.5)*.3});
+      note(v,s,{f,type:'triangle',det:6,d:3.2,g:.09,a:.3,lp:1900,send:.7,pan:(1.5-j)*.3})});
+    note(v,t,{f:73.4,d:3,g:.35,a:.1});
+    note(v,t+.5,{f:1174.7,d:3,g:.14,fm:[3.5,1.6],send:.8});
+    note(v,t+.5,{f:1174.7*2.76,d:1.2,g:.04,send:.8});
+    return v},
+  // walkie-talkie keying clicks for push to talk
+  pttOn(t){const v=V();hiss(v,t,{f:2800,q:2,d:.04,g:.3});note(v,t,{f:1200,f2:900,sl:.03,d:.05,g:.1,a:.001});return v},
+  pttOff(t){const v=V();hiss(v,t,{f:2000,q:1.5,d:.08,g:.25});note(v,t,{f:700,f2:500,sl:.04,d:.06,g:.09,a:.001});return v}
 };
 function play(n,...a){if(!sndOn())return;try{audio();if(A)SND[n](A.currentTime+.02,...a)}catch(e){}}
 function scheduleCountdown(){
@@ -504,7 +617,7 @@ function scheduleCountdown(){
   const key=(state.status==='running'&&sndOn())?state.nextPing:null; if(key===schedKey)return;
   sched.flat().forEach(o=>{try{o.stop()}catch(e){}});sched=[];schedKey=key;schedPingAt=0; if(key===null)return;
   const rem=(state.nextPing-(Date.now()+skew))/1000,t=A.currentTime;
-  for(let k=10;k>=1;k--){const at=rem-k;if(at>.05)sched.push(SND.tick(t+at,false))}
+  for(let k=10;k>=1;k--){const at=rem-k;if(at>.05)sched.push(SND.tick(t+at,k))}
   if(rem>.05){sched.push(SND.ping(t+rem));schedPingAt=Date.now()+rem*1000}
 }
 /* ===== BACKGROUND SURVIVAL: wake lock, silent audio loop, worker clock, notifications ===== */
@@ -531,7 +644,7 @@ window.addEventListener('online',wakeUp);window.addEventListener('pageshow',wake
 setInterval(()=>{try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect();else if(peer&&peer.destroyed&&entered&&!me.isHost&&!recreating&&!roomClosed){recreating=true;newGuestPeer(0)}}catch(e){}},5000);
 setInterval(()=>{if(entered&&me.code)store.set('mh_sess',JSON.stringify({code:me.code,host:me.isHost,pass:me.pass||'',ts:Date.now()}))},30000);
 $('soundToggle').onchange=()=>{schedKey='x';scheduleCountdown()};
-$('testSnd').onclick=()=>{play('ping');setTimeout(()=>play('snap'),1800);setTimeout(()=>play('seek'),3200)};
+$('testSnd').onclick=()=>{play('ping');setTimeout(()=>play('snap'),2400);setTimeout(()=>play('chat'),3600);setTimeout(()=>play('seek'),4400)};
 
 /* ===== profile ===== */
 const validPic=s=>typeof s==='string'&&s.startsWith('data:image/jpeg;base64,')&&s.length<20000;
@@ -648,7 +761,8 @@ function onLive(pid,d){
   const p=state.players[pid];if(!p||state.status!=='running')return;
   if(d.t==='live'){if(typeof d.lat!=='number')return;liveStore[pid]={lat:d.lat,lng:d.lng,acc:d.acc,ts:Date.now()}}else delete liveStore[pid];
   const msg=d.t==='live'?{t:'live',id:pid,l:liveStore[pid]}:{t:'liveoff',id:pid};
-  const sees=team=>p.team==='seeker'||team==='hider'||team===p.team; // hiders see everyone; seekers only see seekers
+  // a seeker's dot goes to everyone; a hider's dot goes only to other hiders, so seekers never receive it
+  const sees=team=>canSeeLive(team,p.team);
   Object.entries(conns).forEach(([cid,c])=>{if(cid!==pid&&sees(state.players[cid]?.team)){try{c.send(msg)}catch(e){}}});
   if(pid!==me.id&&sees(me.team)){if(d.t==='live')live[pid]=liveStore[pid];else delete live[pid];drawLive()}
 }
@@ -661,7 +775,7 @@ function computeAreas(){
 // Exact hider coordinates never leave the host. Everyone gets only the fuzzed circle data.
 function viewFor(team){
   const locs={};Object.entries(state.locs).forEach(([id,arr])=>{if(state.players[id]?.team!=='hider')return;locs[id]=arr.map(a=>a.err?{n:a.n,err:a.err,ts:a.ts}:{n:a.n,ts:a.ts,clat:a.clat,clng:a.clng})});
-  const lv={};Object.entries(liveStore).forEach(([id,l])=>{const p=state.players[id];if(p&&(p.team==='seeker'||team==='hider'))lv[id]=l});
+  const lv={};Object.entries(liveStore).forEach(([id,l])=>{const p=state.players[id];if(p&&canSeeLive(team,p.team))lv[id]=l});
   return Object.assign({},state,{locs,live:lv,areas:computeAreas(),now:Date.now()});
 }
 function broadcast(){
@@ -700,7 +814,10 @@ function applyState(s){
   const pt=me.team;state=s;skew=s.now-Date.now();const mine=s.players[me.id];if(mine)me.team=mine.team;const teamChanged=!first&&pt!==me.team&&s.status==='running'&&prevStatus==='running';
   if(!entered){entered=true;$('join').classList.add('hidden');$('app').classList.remove('hidden');$('roomcode').textContent=me.code;initMap()}
   const pinged=!first&&lastPingN!==null&&s.pingN>lastPingN;lastPingN=s.pingN;first=false;
-  if(s.status==='running'){keepAwake();const own=live[me.id];live=Object.assign({},s.live||{});if(own&&(!live[me.id]||own.ts>live[me.id].ts))live[me.id]=own;startWatch();if(me.team==='hider')snapCam();else stopSnapCam()}
+  if(s.status==='running'){keepAwake();const own=live[me.id];live=Object.assign({},s.live||{});if(own&&(!live[me.id]||own.ts>live[me.id].ts))live[me.id]=own;
+    // belt and braces: even if something stale slipped in, a seeker never keeps a hider's live dot
+    Object.keys(live).forEach(id=>{const p=s.players[id];if(id!==me.id&&(!p||!canSeeLive(me.team,p.team)))delete live[id]});
+    startWatch();if(me.team==='hider')snapCam();else stopSnapCam()}
   else{live={};stopWatch();stopSnapCam()}
   if(s.status!==prevStatus){setSheet(s.status!=='running');
     if(s.status==='running'&&!resumed){showReveal();photos=me.isHost?photos:[];renderGal()}
@@ -766,7 +883,7 @@ function renderGal(){const g=$('gal');g.innerHTML='';$('galWrap').classList.togg
 /* ===== reveal + render ===== */
 function showReveal(){
   const r=$('reveal'),h=me.team==='hider';r.dataset.t=me.team;$('rvWord').textContent=h?'HIDE':'SEEK';
-  $('rvSub').textContent=h?'Seekers get a 0.2 mile circle every '+state.pingMin+' min, then your photo. Keep moving.':'Hiders show as circles every '+state.pingMin+' min, then a photo of each. Their team sees you live.';
+  $('rvSub').textContent=h?'Seekers get a 0.2 mile circle every '+state.pingMin+' min, then your photo. Keep moving.':'Hiders show as circles every '+state.pingMin+' min, then a photo of each. Everyone sees you live.';
   r.className='';void r.offsetWidth;r.classList.add('show');play(h?'hide':'seek');
   notify(h?'You are a HIDER':'You are a SEEKER',h?'Go hide.':'Get ready.','role');if(navigator.vibrate)navigator.vibrate([120,60,120,60,300]);
   clearTimeout(showReveal._a);clearTimeout(showReveal._b);showReveal._a=setTimeout(()=>r.classList.add('fade'),3000);showReveal._b=setTimeout(()=>{r.className='hidden'},3600)}
@@ -788,7 +905,7 @@ function render(){
   $('hostSettings').classList.toggle('hidden',!(me.isHost&&lobby));$('hostNote').classList.toggle('hidden',!me.isHost);$('guestWait').classList.toggle('hidden',me.isHost||!lobby);$('lobbyBox').classList.toggle('hidden',!lobby);
   $('end').classList.toggle('hidden',!(me.isHost&&s.status==='running'));$('adminSwitch').classList.toggle('hidden',!me.admin);$('adminSwitch').textContent='Admin: switch to '+(me.team==='hider'?'Seeker':'Hider');$('pingNow').classList.toggle('hidden',!(me.isHost&&s.status==='running'));$('again').classList.toggle('hidden',!(me.isHost&&s.status==='over'));
   $('teamTxt').textContent=lobby?'Right now you are a '+me.team:(me.team==='hider'?"You're hiding":"You're seeking");
-  $('rule').textContent=me.team==='hider'?`You see every seeker live. Seekers see a rough 0.2 mile circle around you every ${s.pingMin} min, and your camera photo 1 min later.`:`You see fellow seekers live. Hiders appear only as 0.2 mile circles every ${s.pingMin} min, followed by a photo of each.`;
+  $('rule').textContent=me.team==='hider'?`You see every seeker live, plus fellow hiders. Seekers only see a rough 0.2 mile circle around you every ${s.pingMin} min, and your camera photo 1 min later.`:`You see fellow seekers live. Hiders stay hidden and only appear as 0.2 mile circles every ${s.pingMin} min, followed by a photo of each.`;
   const a=avatar(s.players[me.id]||{name:me.name,pic:me.pic},40,me.team);$('meAv').replaceChildren(...a.childNodes);$('meAv').className=a.className;
   $('pttSub').textContent=me.team==='hider'?'Hider radio':'Seeker radio';$('sheetCount').textContent=Object.values(s.players).filter(p=>!p.off).length;renderGal();
   const ul=$('players');ul.innerHTML='';
@@ -839,10 +956,12 @@ function drawPings(){
 }
 function drawLive(){
   if(!layerL||!state)return;layerL.clearLayers();
-  Object.entries(live).forEach(([id,l])=>{const p=state.players[id];if(!p||p.off)return;const col=p.team==='hider'?HC:SC;
+  Object.entries(live).forEach(([id,l])=>{const p=state.players[id];if(!p||p.off)return;
+    if(id!==me.id&&!canSeeLive(me.team,p.team))return;   // seekers never draw a hider's live dot
+    const col=p.team==='hider'?HC:SC;
     L.circle([l.lat,l.lng],{radius:Math.max(l.acc||8,5),color:col,weight:1,fillOpacity:.12,interactive:false}).addTo(layerL);
     L.marker([l.lat,l.lng],{icon:pinIcon(p,id===me.id?'you':ago(l.ts),id),interactive:false,zIndexOffset:500}).addTo(layerL)})}
-function fitMap(){if(!map||!state)return false;const pts=[];Object.values(live).forEach(l=>pts.push([l.lat,l.lng]));
+function fitMap(){if(!map||!state)return false;const pts=[];Object.entries(live).forEach(([id,l])=>{const p=state.players[id];if(id===me.id||(p&&canSeeLive(me.team,p.team)))pts.push([l.lat,l.lng])});
   if(me.team==='seeker')(state.areas||[]).forEach(a=>pts.push([a.clat,a.clng]));if(meMarker)pts.push(meMarker.getLatLng());
   if(pts.length===1)map.setView(pts[0],16);else if(pts.length>1)map.fitBounds(pts,{padding:[90,90]});return pts.length>0}
 $('fit').onclick=fitMap;
@@ -884,7 +1003,7 @@ function wireCall(call){calls[call.peer]=call;
 function syncCalls(){if(!state||!localStream||!peer)return;
   Object.entries(calls).forEach(([id,c])=>{const p=state.players[id];if(!p||p.off||p.team!==me.team){c.close();delete calls[id];const a=audioEls[id];if(a){a.remove();delete audioEls[id]}}});
   Object.entries(state.players).forEach(([id,p])=>{if(id===me.id||p.off||p.team!==me.team||calls[id])return;if(me.id<id){const c=peer.call(id,localStream);if(c)wireCall(c)}})}
-function talk(on){if(!localStream)return;localStream.getAudioTracks().forEach(t=>t.enabled=on);$('ptt').classList.toggle('live',on);$('pttTxt').textContent=on?'On air':'Hold to talk';if(navigator.vibrate)navigator.vibrate(on?20:0)}
+function talk(on){if(!localStream||on===talking)return;talking=on;localStream.getAudioTracks().forEach(t=>t.enabled=on);$('ptt').classList.toggle('live',on);$('pttTxt').textContent=on?'On air':'Hold to talk';if(navigator.vibrate)navigator.vibrate(on?20:0);play(on?'pttOn':'pttOff')}
 const ptt=$('ptt');ptt.addEventListener('pointerdown',e=>{e.preventDefault();ptt.setPointerCapture(e.pointerId);talk(true)});
 ['pointerup','pointercancel'].forEach(ev=>ptt.addEventListener(ev,()=>talk(false)));ptt.addEventListener('contextmenu',e=>e.preventDefault());
 
