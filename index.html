@@ -798,7 +798,10 @@ function viewFor(team){
 }
 function broadcast(){
   Object.entries(conns).forEach(([cid,c])=>{try{c.send({t:'state',s:viewFor(state.players[cid]?.team)})}catch(e){}});
-  applyState(JSON.parse(JSON.stringify(viewFor(state.players[me.id]?.team))));
+  const auth=state;
+  const v=JSON.parse(JSON.stringify(viewFor(auth.players[me.id]?.team)));
+  applyState(v);
+  if(me.isHost){auth.areas=v.areas;auth.now=v.now;state=auth}
 }
 function firePing(){
   state.pingN++;state.photoAt=Date.now()+Math.min(60000,state.pingMin*30000);
