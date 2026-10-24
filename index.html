@@ -15,99 +15,104 @@ button,input,select{font:inherit;color:inherit}
 h1{font-size:28px;margin:16px 0 4px;letter-spacing:.5px}
 .sub{color:var(--mute);margin:0 0 22px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
-label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--mute);margin:10px 0 6px}
+label.l{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--mute);margin:10px 0 6px}
 input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#0f141b}
 .btn{width:100%;padding:13px;border:0;border-radius:10px;background:var(--seeker);color:#04101c;font-weight:700;cursor:pointer;margin-top:12px}
 .btn.alt{background:#232c38;color:var(--text);border:1px solid var(--line)}
 .btn.red{background:var(--hider);color:#1c0503}
-.teams{display:flex;gap:8px}
-.teams label{flex:1;margin:0;text-transform:none;letter-spacing:0;font-size:15px;color:var(--text)}
-.teams input{display:none}
-.teams span{display:block;text-align:center;padding:11px;border-radius:10px;border:1px solid var(--line);cursor:pointer}
-.teams input:checked+span.h{background:var(--hider);color:#1c0503;border-color:var(--hider);font-weight:700}
-.teams input:checked+span.s{background:var(--seeker);color:#04101c;border-color:var(--seeker);font-weight:700}
-.teams input:disabled+span{opacity:.5;cursor:not-allowed}
+.btn.sm{margin:0;padding:7px 11px;width:auto}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1}
+.av{border-radius:50%;overflow:hidden;background:#2a3441;border:3px solid #556;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;flex:0 0 auto}
+.av img{width:100%;height:100%;object-fit:cover;display:block}
+.av.h{border-color:var(--hider)}.av.s{border-color:var(--seeker)}
+#picPrev{width:72px;height:72px;font-size:28px;flex:0 0 72px}
 #app{display:flex;flex-direction:column;height:100dvh}
 #top{display:flex;align-items:center;justify-content:space-between;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;background:var(--panel);border-bottom:1px solid var(--line);gap:8px}
 #top b{font-size:16px}
 .chip{padding:3px 9px;border-radius:99px;border:1px solid var(--line);font-size:12px;color:var(--mute)}
 #map{flex:1;min-height:200px}
-#panel{background:var(--panel);border-top:1px solid var(--line);padding:12px 12px calc(12px + env(safe-area-inset-bottom));max-height:52dvh;overflow:auto}
+#panel{background:var(--panel);border-top:1px solid var(--line);padding:12px 12px calc(12px + env(safe-area-inset-bottom));max-height:55dvh;overflow:auto}
 #count{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
 #countlbl{color:var(--mute);font-size:13px}
-.row{display:flex;gap:8px;align-items:center}
-.row>*{flex:1}
+#teambar{display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:8px 10px;border-radius:10px;font-weight:800;letter-spacing:.5px}
+#teambar.h{background:#ff5a4f26;color:var(--hider)}
+#teambar.s{background:#4aa8ff26;color:var(--seeker)}
+#teambar span{flex:1}
 #players{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px}
-#players li{background:#0f141b;border:1px solid var(--line);border-radius:9px;padding:7px 9px;font-size:14px;display:flex;justify-content:space-between;gap:6px}
-.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
-.dot.h{background:var(--hider)}.dot.s{background:var(--seeker)}
+#players li{background:#0f141b;border:1px solid var(--line);border-radius:9px;padding:6px 8px;font-size:14px;display:flex;align-items:center;gap:7px}
+#players li .nm2{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#players li.off{opacity:.45}
+#players li.tap{cursor:pointer}
 #ptt{width:100%;padding:20px;border-radius:14px;border:2px solid var(--line);background:#232c38;font-weight:800;font-size:17px;margin-top:12px;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 #ptt.live{background:var(--ok);color:#03150d;border-color:var(--ok)}
-#toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:#000c;border:1px solid var(--line);padding:9px 14px;border-radius:10px;z-index:1000;max-width:90vw;text-align:center}
+#toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:#000d;border:1px solid var(--line);padding:9px 14px;border-radius:10px;z-index:1000;max-width:90vw;text-align:center}
 .small{font-size:12px;color:var(--mute)}
-.leaflet-tooltip{background:#111;color:#fff;border:0}
+.pin{width:110px;display:flex;flex-direction:column;align-items:center;pointer-events:none}
+.pin .nm{background:#000c;color:#fff;font-size:12px;font-weight:700;padding:1px 7px;border-radius:6px;max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.pin .tm{font-size:10px;color:#fff;background:#000a;padding:0 5px;border-radius:5px;margin-top:2px}
 </style>
 </head>
 <body>
 
 <div id="join">
   <h1>MANHUNT HQ</h1>
-  <p class="sub">Live map, 5-minute hider pings, team walkie-talkies.</p>
+  <p class="sub">Live map, 5-minute pings, team walkie-talkies.</p>
   <div class="card">
-    <label>Your name</label>
-    <input type="text" id="name" maxlength="16" placeholder="e.g. Jake" autocomplete="off">
-    <label>Your team</label>
-    <div class="teams">
-      <label><input type="radio" name="jt" value="hider" checked><span class="h">Hider</span></label>
-      <label><input type="radio" name="jt" value="seeker"><span class="s">Seeker</span></label>
+    <div class="row" style="align-items:center">
+      <div class="av" id="picPrev" style="flex:0 0 72px"></div>
+      <div style="flex:1">
+        <label class="btn alt sm" style="display:inline-block;cursor:pointer;margin:0">Choose photo<input type="file" id="picIn" accept="image/*" hidden></label>
+        <div class="small" style="margin-top:6px">Saved on this device.</div>
+      </div>
     </div>
+    <label class="l">Your name</label>
+    <input type="text" id="name" maxlength="16" placeholder="e.g. Jake" autocomplete="off">
   </div>
   <div class="card">
-    <button class="btn" id="create">Create a game (I'm the host)</button>
+    <button class="btn" id="create" style="margin-top:0">Create a game (I'm the host)</button>
   </div>
   <div class="card">
-    <label>Or join with a room code</label>
+    <label class="l" style="margin-top:0">Or join with a room code</label>
     <input type="text" id="code" maxlength="4" placeholder="ABCD" autocomplete="off" style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-size:20px">
     <button class="btn alt" id="joinbtn">Join game</button>
   </div>
-  <p class="small">Location is only read at the moment a ping fires (hiders only). The mic is only live while you hold the talk button. Needs HTTPS (any normal web host works).</p>
+  <p class="small">Location is only read at the moment a ping fires. Hiders are shown to everyone; seekers are shown only to other seekers. The mic is only live while you hold the talk button. Needs HTTPS.</p>
 </div>
 
 <div id="app" class="hidden">
   <div id="top">
     <div><b id="roomcode"></b> <span class="chip" id="status"></span></div>
     <div class="row" style="flex:0 0 auto">
-      <button class="btn alt" id="share" style="margin:0;padding:7px 11px;width:auto">Share</button>
-      <button class="btn alt" id="fit" style="margin:0;padding:7px 11px;width:auto">Fit</button>
-      <button class="btn alt" id="locme" style="margin:0;padding:7px 11px;width:auto">Me</button>
+      <button class="btn alt sm" id="share">Share</button>
+      <button class="btn alt sm" id="fit">Fit</button>
+      <button class="btn alt sm" id="locme">Me</button>
     </div>
   </div>
   <div id="map"></div>
   <div id="panel">
+    <div id="teambar" class="h"><div class="av" id="meAv" style="width:34px;height:34px"></div><span id="teamTxt"></span>
+      <label class="btn alt sm" style="cursor:pointer;font-weight:600">Photo<input type="file" id="picIn2" accept="image/*" hidden></label></div>
     <div id="countlbl">Waiting to start</div>
     <div id="count">--:--</div>
 
     <div id="lobbyBox">
-      <label>Your team</label>
-      <div class="teams">
-        <label><input type="radio" name="t" value="hider"><span class="h">Hider</span></label>
-        <label><input type="radio" name="t" value="seeker"><span class="s">Seeker</span></label>
-      </div>
       <div id="hostSettings" class="hidden">
-        <div class="row">
-          <div><label>Hide time (min)</label><input type="number" id="hideMin" value="10" min="0" max="120"></div>
-          <div><label>Ping every (min)</label><input type="number" id="pingMin" value="5" min="1" max="60"></div>
+        <div class="row" style="margin-top:6px">
+          <div><label class="l">Seekers</label><input type="number" id="seekN" value="1" min="0" max="20"></div>
+          <div><label class="l">Hide (min)</label><input type="number" id="hideMin" value="10" min="0" max="120"></div>
+          <div><label class="l">Ping (min)</label><input type="number" id="pingMin" value="5" min="1" max="60"></div>
         </div>
+        <button class="btn alt" id="rand">🎲 Randomize teams</button>
         <button class="btn" id="start">Start game</button>
+        <div class="small" style="margin-top:6px">Tap a player below to flip their team by hand.</div>
       </div>
-      <div id="guestWait" class="small" style="margin-top:10px">Waiting for the host to start…</div>
+      <div id="guestWait" class="small" style="margin-top:10px">Waiting for the host to pick teams and start…</div>
     </div>
 
-    <div id="runBox" class="hidden">
-      <div class="row">
-        <button class="btn red hidden" id="end">End game</button>
-        <button class="btn alt hidden" id="again">New round</button>
-      </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn red hidden" id="end">End game</button>
+      <button class="btn alt hidden" id="again">New round</button>
     </div>
 
     <button id="ptt">HOLD TO TALK (team radio)</button>
@@ -125,85 +130,169 @@ input[type=text],input[type=number]{width:100%;padding:12px;border-radius:10px;b
 const CFG = { photonPunAppId:'e311f009-c6be-433f-bda5-ee47fe131d88', photonVoiceAppId:'03e1ff28-3112-4a10-a254-8230478e742e' };
 
 const $ = id => document.getElementById(id);
-const me = { id:null, name:'', team:'hider', isHost:false, code:'' };
-let peer, hostConn = null, localStream = null, state = null, skew = 0, lastPingN = null, firstState = true;
+const me = { id:null, name:'', team:'hider', isHost:false, code:'', pic:null };
+let peer, lobbyPeer, hostConn = null, localStream = null, state = null, skew = 0;
+let lastPingN = null, firstState = true, entered = false, migrating = false, tickHost = null;
 const conns = {}, calls = {}, audioEls = {};
-let map, layer, meMarker, fitted = false, wakeLock = null;
+let map, layer, meMarker, fitted = false;
+const store = { get:k=>{ try{return localStorage.getItem(k)}catch(e){return null} }, set:(k,v)=>{ try{localStorage.setItem(k,v)}catch(e){} } };
 
 // ---------- helpers ----------
 function toast(msg, ms=3500){ const t=$('toast'); t.textContent=msg; t.classList.remove('hidden'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.add('hidden'),ms); }
 function fmt(ms){ ms=Math.max(0,Math.ceil(ms/1000)); const m=Math.floor(ms/60), s=ms%60; return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
-function ago(ts){ const s=Math.round((Date.now()+skew-ts)/1000); if(s<60) return s+'s ago'; return Math.round(s/60)+' min ago'; }
+function ago(ts){ const s=Math.max(0,Math.round((Date.now()+skew-ts)/1000)); return s<60 ? s+'s ago' : Math.round(s/60)+' min ago'; }
 function beep(){ try{ const c=new (window.AudioContext||window.webkitAudioContext)(); const o=c.createOscillator(), g=c.createGain(); o.connect(g); g.connect(c.destination); o.frequency.value=880; g.gain.value=.15; o.start(); o.stop(c.currentTime+.35);}catch(e){} if(navigator.vibrate) navigator.vibrate([200,100,200]); }
 async function getMic(){
   try{
     localStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
     localStream.getAudioTracks().forEach(t=>t.enabled=false);
-    $('micnote').textContent='';
   }catch(e){
     localStream = new MediaStream();
     $('micnote').textContent='Mic unavailable — you can listen but not talk. Allow microphone access and rejoin.';
   }
 }
-async function keepAwake(){ try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){} }
+async function keepAwake(){ try{ if('wakeLock' in navigator) await navigator.wakeLock.request('screen'); }catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && state && state.status==='running') keepAwake(); });
+window.addEventListener('pagehide',()=>{ try{ peer && peer.destroy(); }catch(e){} });
 
-// ---------- join / create ----------
+// ---------- profile picture / name (saved on device) ----------
+const validPic = s => typeof s==='string' && s.startsWith('data:image/jpeg;base64,') && s.length<20000;
+function resizeImg(file){ return new Promise((res,rej)=>{ const img=new Image(), u=URL.createObjectURL(file);
+  img.onload=()=>{ const S=72,c=document.createElement('canvas'); c.width=c.height=S; const x=c.getContext('2d'); const m=Math.min(img.width,img.height);
+    x.drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,S,S); URL.revokeObjectURL(u); res(c.toDataURL('image/jpeg',.72)); };
+  img.onerror=rej; img.src=u; }); }
+function avatar(p, size, team){
+  const d=document.createElement('div'); d.className='av'+(team?(team==='hider'?' h':' s'):''); d.style.width=d.style.height=size+'px'; d.style.fontSize=Math.round(size*.45)+'px';
+  if(validPic(p.pic)){ const i=document.createElement('img'); i.src=p.pic; d.appendChild(i); } else d.textContent=((p.name||'?')[0]||'?').toUpperCase();
+  return d;
+}
+function paintPrev(){ const el=$('picPrev'); const a=avatar({name:$('name').value||'?',pic:me.pic},72); el.replaceChildren(...a.childNodes); el.style.fontSize='28px'; }
+me.pic = store.get('mh_pic'); if(!validPic(me.pic)) me.pic=null;
+$('name').value = store.get('mh_name')||''; $('name').addEventListener('input',paintPrev); paintPrev();
+async function onPic(e){
+  const f=e.target.files[0]; if(!f) return;
+  try{ me.pic = await resizeImg(f); store.set('mh_pic', me.pic); paintPrev(); if(entered){ send({t:'pic', pic:me.pic}); } }catch(err){ toast('Could not read that image'); }
+  e.target.value='';
+}
+$('picIn').onchange = onPic; $('picIn2').onchange = onPic;
+
+// ---------- peer setup ----------
 const params = new URLSearchParams(location.search);
 if(params.get('room')) $('code').value = params.get('room').toUpperCase();
-const selTeam = () => document.querySelector('input[name=jt]:checked').value;
+
+function commonPeer(){
+  peer.on('call', onCall);
+  peer.on('connection', c => {
+    if(me.isHost) hostAccept(c);
+    else c.on('open', () => { c.send({t:'wait'}); setTimeout(()=>c.close(),500); });
+  });
+}
 
 $('create').onclick = async () => {
-  me.name = $('name').value.trim() || 'Host'; me.team = selTeam(); me.isHost = true;
+  me.name = $('name').value.trim() || 'Host'; store.set('mh_name', me.name); me.isHost = true;
   const chars='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; me.code=''; for(let i=0;i<4;i++) me.code+=chars[Math.floor(Math.random()*chars.length)];
   await getMic();
   peer = new Peer('manhunt-'+me.code);
-  peer.on('error', e => { if(e.type==='unavailable-id'){ toast('Code clash, try again'); } else toast('Connection error: '+e.type); });
+  peer.on('error', e => toast(e.type==='unavailable-id' ? 'Code clash, try again' : 'Connection error: '+e.type));
   peer.on('open', id => {
     me.id = id;
-    state = { status:'lobby', players:{[id]:{name:me.name,team:me.team}}, hideMin:10, pingMin:5, startAt:0, nextPing:0, pingN:0, locs:{} };
-    enterApp(); broadcast();
+    state = { status:'lobby', hostId:id, epoch:0, order:[id], players:{[id]:{name:me.name,team:'hider',pic:me.pic}}, hideMin:10, pingMin:5, startAt:0, nextPing:0, pingN:0, locs:{} };
+    tickHost = setInterval(hostTick, 1000);
+    broadcast();
   });
-  peer.on('connection', hostAccept);
-  peer.on('call', onCall);
-  setInterval(hostTick, 1000);
+  commonPeer();
 };
 
 $('joinbtn').onclick = async () => {
-  me.name = $('name').value.trim() || 'Player'; me.team = selTeam(); me.code = $('code').value.trim().toUpperCase();
+  me.name = $('name').value.trim() || 'Player'; store.set('mh_name', me.name); me.code = $('code').value.trim().toUpperCase();
   if(me.code.length!==4){ toast('Enter the 4-letter room code'); return; }
   await getMic();
   peer = new Peer();
-  peer.on('error', e => toast(e.type==='peer-unavailable' ? 'Room not found' : 'Connection error: '+e.type));
-  peer.on('open', id => {
-    me.id = id;
-    hostConn = peer.connect('manhunt-'+me.code, {reliable:true});
-    hostConn.on('open', () => { hostConn.send({t:'hello', name:me.name, team:me.team}); enterApp(); });
-    hostConn.on('data', d => { if(d.t==='state') applyState(d.s); else if(d.t==='ping') doPing(); });
-    hostConn.on('close', () => toast('Disconnected from host', 10000));
-  });
-  peer.on('call', onCall);
+  peer.on('error', e => { if(!entered) toast(e.type==='peer-unavailable' ? 'Room not found' : 'Connection error: '+e.type); });
+  peer.on('open', id => { me.id = id; connectToHost('manhunt-'+me.code, ok => { if(!ok && !entered) toast('Could not join that room'); }); });
+  commonPeer();
 };
 
-function enterApp(){
-  $('join').classList.add('hidden'); $('app').classList.remove('hidden');
-  $('roomcode').textContent = 'Room '+me.code;
-  $('hostSettings').classList.toggle('hidden', !me.isHost);
-  $('guestWait').classList.toggle('hidden', me.isHost);
-  document.querySelector(`input[name=t][value=${me.team}]`).checked = true;
-  initMap();
+function connectToHost(hostId, cb){
+  const c = peer.connect(hostId, {reliable:true});
+  let done = false;
+  const fail = () => { if(done) return; done=true; clearTimeout(to); try{c.close()}catch(e){} cb && cb(false); };
+  const to = setTimeout(fail, 6000);
+  c.on('open', () => c.send({t:'hello', name:me.name, pic:me.pic}));
+  c.on('data', d => {
+    if(d.t==='state'){ if(!done){ done=true; clearTimeout(to); hostConn=c; cb&&cb(true); } applyState(d.s); }
+    else if(d.t==='ping') doPing();
+    else if(d.t==='redirect'){ done=true; clearTimeout(to); c.close(); connectToHost(d.id, cb); }
+    else if(d.t==='wait') fail();
+  });
+  c.on('close', () => { clearTimeout(to); if(hostConn===c){ hostConn=null; onHostLost(); } else fail(); });
+  c.on('error', fail);
+}
+
+// ---------- host migration ----------
+function onHostLost(){
+  if(migrating || !state || me.isHost) return;
+  migrating = true; toast('Host left — choosing a new host…', 6000);
+  const old = state.hostId;
+  const cands = state.order.filter(id => id!==old && state.players[id] && !state.players[id].off);
+  tryCandidate(cands, 0, old);
+}
+function tryCandidate(cands, i, old){
+  if(i>=cands.length){ migrating=false; toast('No host available — game ended',10000); return; }
+  const id = cands[i];
+  if(id===me.id){ promote(old); return; }
+  let tries = 0;
+  const go = () => connectToHost(id, ok => {
+    if(ok){ migrating=false; toast('New host: '+(state.players[id]?.name||'?')); return; }
+    if(++tries<4) setTimeout(go, 2000); else tryCandidate(cands, i+1, old);
+  });
+  setTimeout(go, 1500);
+}
+function promote(old){
+  me.isHost = true; migrating = false;
+  state.nextPing -= skew; state.startAt -= skew;           // convert old host's clock to mine
+  state.hostId = me.id; state.epoch = (state.epoch||0)+1;
+  if(state.players[old]) removeOrOff(old);
+  Object.keys(conns).forEach(k => delete conns[k]);
+  if(!tickHost) tickHost = setInterval(hostTick, 1000);
+  startLobbyPeer(0);
+  toast('You are now the host', 6000);
+  broadcast();
+  setTimeout(prune, 12000);
+}
+function startLobbyPeer(n){           // keeps the room code working for late joiners after migration
+  if(n>15) return;
+  const lp = new Peer('manhunt-'+me.code);
+  lp.on('open', () => { lobbyPeer = lp; });
+  lp.on('connection', c => c.on('open', () => { c.send({t:'redirect', id:me.id}); setTimeout(()=>c.close(),800); }));
+  lp.on('error', e => { if(e.type==='unavailable-id'){ try{lp.destroy()}catch(_){} setTimeout(()=>startLobbyPeer(n+1), 4000); } });
+}
+function removeOrOff(id){
+  if(!state.players[id]) return;
+  if(state.status==='lobby'){ delete state.players[id]; state.order = state.order.filter(x=>x!==id); delete state.locs[id]; }
+  else state.players[id].off = true;
+}
+function prune(){
+  let ch=false;
+  Object.keys(state.players).forEach(id => { if(id!==me.id && !(conns[id]&&conns[id].open) && !state.players[id].off){ removeOrOff(id); ch=true; } });
+  if(ch) broadcast();
 }
 
 // ---------- host logic ----------
 function hostAccept(c){
   c.on('open', () => { conns[c.peer] = c; });
   c.on('data', d => hostHandle(c.peer, d));
-  c.on('close', () => { delete conns[c.peer]; if(state.players[c.peer]){ delete state.players[c.peer]; broadcast(); } });
+  c.on('close', () => { if(conns[c.peer]===c){ delete conns[c.peer]; removeOrOff(c.peer); broadcast(); } });
 }
 function hostHandle(pid, d){
-  if(d.t==='hello'){ state.players[pid]={name:String(d.name).slice(0,16), team:d.team==='seeker'?'seeker':'hider'}; }
-  else if(d.t==='team'){ if(state.status==='lobby' && state.players[pid]) state.players[pid].team = d.team==='seeker'?'seeker':'hider'; }
+  if(d.t==='hello'){
+    const ex = state.players[pid];
+    state.players[pid] = { name:String(d.name||'Player').slice(0,16), team: ex?ex.team:'hider', pic: validPic(d.pic)?d.pic:null };
+    if(!state.order.includes(pid)) state.order.push(pid);
+  }
+  else if(d.t==='pic'){ if(state.players[pid] && validPic(d.pic)) state.players[pid].pic = d.pic; }
   else if(d.t==='loc'){
+    if(!state.players[pid]) return;
     const arr = state.locs[pid] = state.locs[pid] || [];
     if(d.err) arr.push({n:state.pingN, err:true, ts:Date.now()});
     else arr.push({n:state.pingN, lat:d.lat, lng:d.lng, acc:d.acc, ts:Date.now()});
@@ -211,12 +300,18 @@ function hostHandle(pid, d){
   }
   broadcast();
 }
+// hiders' pings go to everyone; seekers' pings go only to seekers
+function viewFor(team){
+  const locs = {};
+  Object.entries(state.locs).forEach(([id,arr]) => { const p=state.players[id]; if(p && (p.team==='hider' || team==='seeker')) locs[id]=arr; });
+  return Object.assign({}, state, {locs, now:Date.now()});
+}
 function broadcast(){
-  state.now = Date.now();
-  Object.values(conns).forEach(c => { try{ c.send({t:'state', s:state}); }catch(e){} });
-  applyState(JSON.parse(JSON.stringify(state)));
+  Object.entries(conns).forEach(([cid,c]) => { try{ c.send({t:'state', s:viewFor(state.players[cid]?.team)}); }catch(e){} });
+  applyState(JSON.parse(JSON.stringify(viewFor(state.players[me.id]?.team))));
 }
 function hostTick(){
+  if(!me.isHost) return;
   if(state.status==='running' && Date.now() >= state.nextPing){
     state.pingN++; state.nextPing += state.pingMin*60000;
     Object.values(conns).forEach(c => { try{ c.send({t:'ping'}); }catch(e){} });
@@ -225,28 +320,33 @@ function hostTick(){
 }
 $('start').onclick = () => {
   state.hideMin = Math.max(0, +$('hideMin').value||0); state.pingMin = Math.max(1, +$('pingMin').value||5);
-  state.locs = {}; state.pingN = 0; state.startAt = Date.now(); state.nextPing = Date.now() + state.hideMin*60000;
-  if(state.hideMin===0) state.nextPing = Date.now()+1000;
+  state.locs = {}; state.pingN = 0; state.startAt = Date.now();
+  state.nextPing = Date.now() + (state.hideMin===0 ? 1000 : state.hideMin*60000);
   state.status = 'running'; broadcast(); keepAwake();
 };
+$('rand').onclick = () => {
+  const ids = Object.keys(state.players).filter(id => !state.players[id].off);
+  for(let i=ids.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [ids[i],ids[j]]=[ids[j],ids[i]]; }
+  let k = Math.max(0, Math.floor(+$('seekN').value||0)); k = Math.min(k, Math.max(ids.length-1,0));
+  ids.forEach((id,i) => state.players[id].team = i<k ? 'seeker' : 'hider');
+  broadcast(); toast('Teams randomized');
+};
 $('end').onclick = () => { state.status='over'; broadcast(); };
-$('again').onclick = () => { state.status='lobby'; state.locs={}; state.pingN=0; broadcast(); };
+$('again').onclick = () => { state.status='lobby'; state.locs={}; state.pingN=0; Object.keys(state.players).forEach(id=>{ if(state.players[id].off) removeOrOff(id); }); broadcast(); };
 
 // ---------- client state ----------
 function send(d){ if(me.isHost) hostHandle(me.id, d); else if(hostConn && hostConn.open) hostConn.send(d); }
-document.querySelectorAll('input[name=t]').forEach(r => r.onchange = () => { me.team = r.value; send({t:'team', team:r.value}); });
-
 function applyState(s){
   state = s; skew = s.now - Date.now();
   const mine = s.players[me.id]; if(mine) me.team = mine.team;
-  if(!firstState && lastPingN!==null && s.pingN > lastPingN){ beep(); toast('📍 PING! Hider locations updated'); }
+  if(!entered){ entered = true; enterApp(); }
+  if(!firstState && lastPingN!==null && s.pingN > lastPingN){ beep(); toast('📍 PING! Locations updated'); }
   lastPingN = s.pingN; firstState = false;
   if(s.status==='running') keepAwake();
   render(); syncCalls();
 }
-
 function doPing(){
-  if(me.team!=='hider' || !state || state.status!=='running') return;
+  if(!state || state.status!=='running') return;
   toast('Ping! Sharing your location once…');
   if(!navigator.geolocation){ send({t:'loc', err:'unsupported'}); return; }
   navigator.geolocation.getCurrentPosition(
@@ -257,29 +357,37 @@ function doPing(){
 }
 
 // ---------- render ----------
+function enterApp(){
+  $('join').classList.add('hidden'); $('app').classList.remove('hidden');
+  $('roomcode').textContent = 'Room '+me.code;
+  initMap();
+}
 function render(){
-  const s = state;
+  const s = state, lobby = s.status==='lobby';
   $('status').textContent = {lobby:'Lobby',running:'In progress',over:'Game over'}[s.status];
-  const lobby = s.status==='lobby';
+  $('hostSettings').classList.toggle('hidden', !(me.isHost && lobby));
+  $('guestWait').classList.toggle('hidden', me.isHost || !lobby);
   $('lobbyBox').classList.toggle('hidden', !lobby);
-  $('runBox').classList.toggle('hidden', lobby);
   $('end').classList.toggle('hidden', !(me.isHost && s.status==='running'));
   $('again').classList.toggle('hidden', !(me.isHost && s.status==='over'));
-  document.querySelector(`input[name=t][value=${me.team}]`).checked = true;
+
+  const tb=$('teambar'); tb.className = me.team==='hider'?'h':'s';
+  $('teamTxt').textContent = 'YOU ARE A '+me.team.toUpperCase()+(me.isHost?' · HOST':'');
+  const mine = s.players[me.id]||{name:me.name,pic:me.pic}; const a = avatar(mine,34,me.team); $('meAv').replaceChildren(...a.childNodes); $('meAv').className=a.className;
 
   const ul = $('players'); ul.innerHTML='';
-  Object.entries(s.players).forEach(([id,p]) => {
-    const li = document.createElement('li');
-    const l = document.createElement('span'); const d=document.createElement('i'); d.className='dot '+(p.team==='hider'?'h':'s');
-    l.appendChild(d); l.appendChild(document.createTextNode(p.name+(id===me.id?' (you)':'')));
-    li.appendChild(l);
+  s.order.forEach(id => {
+    const p = s.players[id]; if(!p) return;
+    const li = document.createElement('li'); if(p.off) li.classList.add('off');
+    li.appendChild(avatar(p,24,p.team));
+    const n=document.createElement('span'); n.className='nm2'; n.textContent=(id===s.hostId?'👑 ':'')+p.name+(id===me.id?' (you)':'')+(p.off?' · offline':''); li.appendChild(n);
     const last = (s.locs[id]||[]).slice(-1)[0];
     if(last){ const r=document.createElement('span'); r.className='small'; r.textContent = last.err ? 'no fix' : ago(last.ts); li.appendChild(r); }
+    if(me.isHost && lobby){ li.classList.add('tap'); li.onclick = () => { state.players[id].team = state.players[id].team==='hider'?'seeker':'hider'; broadcast(); }; }
     ul.appendChild(li);
   });
   drawMap(); tick();
 }
-
 function tick(){
   if(!state) return;
   const s = state, now = Date.now()+skew;
@@ -293,24 +401,31 @@ setInterval(tick, 500);
 
 // ---------- map ----------
 function initMap(){
-  map = L.map('map',{zoomControl:true}).setView([39,-98],4);
+  map = L.map('map').setView([39,-98],4);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
   layer = L.layerGroup().addTo(map);
   setTimeout(()=>map.invalidateSize(),200);
+}
+function pinIcon(p,last){
+  const w=document.createElement('div'); w.className='pin';
+  const nm=document.createElement('div'); nm.className='nm'; nm.textContent=p.name;
+  const av=avatar(p,34,p.team);
+  const tm=document.createElement('div'); tm.className='tm'; tm.textContent='#'+last.n+' · '+ago(last.ts);
+  w.append(nm,av,tm);
+  return L.divIcon({html:w, className:'', iconSize:[110,70], iconAnchor:[55,35]});
 }
 function drawMap(){
   layer.clearLayers(); const pts=[];
   Object.entries(state.locs).forEach(([id,arr]) => {
     const p = state.players[id]; if(!p) return;
-    const good = arr.filter(a=>!a.err);
-    if(!good.length) return;
+    const good = arr.filter(a=>!a.err); if(!good.length) return;
+    const col = p.team==='hider' ? '#ff5a4f' : '#4aa8ff';
     const trail = good.map(a=>[a.lat,a.lng]);
-    if(trail.length>1) L.polyline(trail,{color:'#ff5a4f',weight:2,opacity:.45,dashArray:'4 6'}).addTo(layer);
-    good.slice(0,-1).forEach(a => L.circleMarker([a.lat,a.lng],{radius:4,color:'#ff5a4f',weight:1,fillOpacity:.35}).addTo(layer));
+    if(trail.length>1) L.polyline(trail,{color:col,weight:2,opacity:.45,dashArray:'4 6'}).addTo(layer);
+    good.slice(0,-1).forEach(a => L.circleMarker([a.lat,a.lng],{radius:4,color:col,weight:1,fillOpacity:.35}).addTo(layer));
     const last = good[good.length-1];
-    L.circle([last.lat,last.lng],{radius:Math.max(last.acc||10,5),color:'#ff5a4f',weight:1,fillOpacity:.1}).addTo(layer);
-    L.circleMarker([last.lat,last.lng],{radius:9,color:'#fff',weight:2,fillColor:'#ff5a4f',fillOpacity:1})
-      .bindTooltip(`${p.name} · ping #${last.n} · ${ago(last.ts)}`,{permanent:true,direction:'top',offset:[0,-8]}).addTo(layer);
+    L.circle([last.lat,last.lng],{radius:Math.max(last.acc||10,5),color:col,weight:1,fillOpacity:.1}).addTo(layer);
+    L.marker([last.lat,last.lng],{icon:pinIcon(p,last),interactive:false}).addTo(layer);
     pts.push([last.lat,last.lng]);
   });
   if(pts.length && !fitted){ fitMap(); fitted=true; }
@@ -318,13 +433,13 @@ function drawMap(){
 function fitMap(){
   const pts=[]; Object.values(state.locs).forEach(a=>{ const g=a.filter(x=>!x.err).slice(-1)[0]; if(g) pts.push([g.lat,g.lng]); });
   if(meMarker) pts.push(meMarker.getLatLng());
-  if(pts.length===1) map.setView(pts[0],17); else if(pts.length>1) map.fitBounds(pts,{padding:[50,50]});
+  if(pts.length===1) map.setView(pts[0],17); else if(pts.length>1) map.fitBounds(pts,{padding:[60,60]});
 }
 $('fit').onclick = fitMap;
 $('locme').onclick = () => {
   navigator.geolocation.getCurrentPosition(p => {
     const ll=[p.coords.latitude,p.coords.longitude];
-    if(meMarker) meMarker.setLatLng(ll); else meMarker=L.circleMarker(ll,{radius:8,color:'#fff',weight:2,fillColor:'#4aa8ff',fillOpacity:1}).bindTooltip('You (private, one-time)').addTo(map);
+    if(meMarker) meMarker.setLatLng(ll); else meMarker=L.circleMarker(ll,{radius:8,color:'#fff',weight:2,fillColor:'#3ecf8e',fillOpacity:1}).bindTooltip('You (private, one-time)').addTo(map);
     map.setView(ll,17);
   }, e => toast('Location error: '+e.message), {enableHighAccuracy:true,timeout:15000});
 };
@@ -350,10 +465,10 @@ function wireCall(call){
   call.on('close', drop); call.on('error', drop);
 }
 function syncCalls(){
-  if(!state || !localStream) return;
-  Object.entries(calls).forEach(([id,c]) => { const p=state.players[id]; if(!p || p.team!==me.team){ c.close(); delete calls[id]; const a=audioEls[id]; if(a){a.remove(); delete audioEls[id];} } });
+  if(!state || !localStream || !peer) return;
+  Object.entries(calls).forEach(([id,c]) => { const p=state.players[id]; if(!p || p.off || p.team!==me.team){ c.close(); delete calls[id]; const a=audioEls[id]; if(a){a.remove(); delete audioEls[id];} } });
   Object.entries(state.players).forEach(([id,p]) => {
-    if(id===me.id || p.team!==me.team || calls[id]) return;
+    if(id===me.id || p.off || p.team!==me.team || calls[id]) return;
     if(me.id < id){ const c = peer.call(id, localStream); if(c) wireCall(c); }
   });
 }
