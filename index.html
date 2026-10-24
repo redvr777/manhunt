@@ -39,6 +39,9 @@ input[type=checkbox]{accent-color:var(--ac);width:18px;height:18px;vertical-alig
 .codeIn{font:900 34px var(--disp)!important;letter-spacing:.35em;text-transform:uppercase;text-align:center;padding-left:.35em!important}
 #insecure{background:#3a1209;border-left:4px solid var(--hc);color:#ffcdb8;padding:12px 14px;border-radius:4px 14px 4px 14px;font-size:14px}
 #join .btn{background:#f1f0ec;color:#101216}#join .btn.ghost{background:#272b34;color:#f1f0ec}
+#adminBox{position:absolute;top:calc(8px + env(safe-area-inset-top));left:10px;z-index:10;display:flex;align-items:center;gap:6px}
+#adminIn{width:84px;padding:4px 6px;font:700 13px var(--body);border:1px solid #ffffff33;border-radius:8px;background:#0d0f13cc;color:#f1f0ec;text-align:center}
+#adminTag{font:900 12px var(--disp);letter-spacing:.15em;padding:3px 8px;border-radius:8px 2px 8px 2px;background:#3ecf8e;color:#03150c;cursor:pointer}
 /* game */
 #app{position:fixed;inset:0}#map{position:absolute;inset:0;background:var(--bg)}
 body[data-theme] .leaflet-tile-pane{filter:var(--map);transition:filter .9s}
@@ -166,7 +169,7 @@ a.btn{text-decoration:none;display:inline-block;text-align:center}.btn.recording
 </style></head>
 <body data-theme="neutral">
 
-<section id="join"><div class="jin">
+<section id="join"><div id="adminBox"><input type="password" id="adminIn" inputmode="numeric" maxlength="6" placeholder="Admin" autocomplete="off"><span id="adminTag" class="hidden">ADMIN</span></div><div class="jin">
   <h1 class="logo" aria-label="Manhunt"><span class="e" aria-hidden="true">MANHUNT</span><span class="i" aria-hidden="true">MANHUNT</span></h1>
   <p class="small" style="font-size:17px;color:#c8c5bb">Live hide and seek. Hiders get radar circles and spy photos. Seekers hunt.</p>
   <div id="insecure" class="hidden"><b>Location, mic and camera are blocked here.</b> Browsers only allow them over https. Upload this file to Netlify Drop, GitHub Pages or Cloudflare Pages and open that link on every phone.</div>
@@ -206,7 +209,7 @@ a.btn{text-decoration:none;display:inline-block;text-align:center}.btn.recording
   <div id="sheet">
     <div id="grab"></div>
     <div id="teambar"><div class="av" id="meAv" style="width:40px;height:40px"></div><div id="teamTxt"></div><label class="btn ghost sm" style="cursor:pointer;margin:0">Photo<input type="file" id="picIn2" accept="image/*" hidden></label></div>
-    <div id="rule"></div>
+    <button class="btn ghost hidden" id="adminSwitch" style="margin-top:10px">Admin: switch team</button><div id="rule"></div>
     <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="liveToggle" checked>Share my live location (hiders see seekers, teams see teammates)</label>
     <label class="small" style="display:block;margin:8px 0"><input type="checkbox" id="soundToggle" checked>Game sounds</label>
     <div id="lobbyBox">
@@ -365,6 +368,15 @@ $('picPrev').onclick=()=>$('picIn').click();
 async function onPic(e){const f=e.target.files[0];if(!f)return;try{me.pic=await resizeImg(f);store.set('mh_pic',me.pic);paintPrev();if(entered)send({t:'pic',pic:me.pic})}catch(x){toast('Could not read that image')}e.target.value=''}
 $('picIn').onchange=onPic;$('picIn2').onchange=onPic;
 
+/* ===== ADMIN ===== */
+const ADMIN_CODE='476789',adminPeers={};
+me.admin=store.get('mh_admin')==='1';
+function paintAdmin(){$('adminIn').classList.toggle('hidden',me.admin);$('adminTag').classList.toggle('hidden',!me.admin);if(entered&&state)render()}
+$('adminIn').addEventListener('input',()=>{if($('adminIn').value.trim()===ADMIN_CODE){me.admin=true;store.set('mh_admin','1');$('adminIn').value='';paintAdmin();toast('Admin on. No passcode needed, switch teams any time.')}});
+$('adminTag').onclick=()=>{me.admin=false;store.set('mh_admin','');paintAdmin();toast('Admin off')};
+$('adminSwitch').onclick=()=>send({t:'setteam',id:me.id,team:me.team==='hider'?'seeker':'hider'});
+paintAdmin();
+
 /* ===== networking ===== */
 const params=new URLSearchParams(location.search);if(params.get('room'))$('code').value=params.get('room').toUpperCase();
 let recreating=false;
@@ -387,7 +399,7 @@ $('create').onclick=()=>{audio();askNotify();me.name=$('name').value.trim()||'Ho
   const ch='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let c='';for(let i=0;i<4;i++)c+=ch[Math.floor(Math.random()*ch.length)];startHost(c)};
 async function doJoin(){if(!permsOk){afterGate=doJoin;showGate();return}audio();askNotify();me.name=$('name').value.trim()||'Player';store.set('mh_name',me.name);me.code=$('code').value.trim().toUpperCase();
   if(me.code.length!==4){toast('Enter the 4-letter room code');return}
-  me.pass=$('pass').value.trim();me.denied=false;if(me.pass.length<4){toast('Enter the passcode from the host');return}
+  me.pass=$('pass').value.trim();me.denied=false;if(me.pass.length<4&&!me.admin){toast('Enter the passcode from the host');return}
   await getMic();store.set('mh_sess',JSON.stringify({code:me.code,host:false,pass:me.pass,ts:Date.now()}));newGuestPeer(0)}
 $('joinbtn').onclick=doJoin;
 function newGuestPeer(tries){
@@ -403,7 +415,7 @@ function newGuestPeer(tries){
 function connectToHost(hid,cb){
   const c=peer.connect(hid,{reliable:true});let done=false;
   const fail=()=>{if(done)return;done=true;clearTimeout(to);try{c.close()}catch(e){}cb&&cb(false)};const to=setTimeout(fail,6000);
-  c.on('open',()=>c.send({t:'hello',name:me.name,pic:me.pic,pass:me.pass}));
+  c.on('open',()=>c.send({t:'hello',name:me.name,pic:me.pic,pass:me.pass,admin:me.admin?ADMIN_CODE:''}));
   c.on('data',d=>{
     if(d.t==='state'){if(!done){done=true;clearTimeout(to);hostConn=c;cb&&cb(true)}applyState(d.s)}
     else if(d.t==='ping')doPing();else if(d.t==='snap')doSnap(d.n);
@@ -418,17 +430,21 @@ function connectToHost(hid,cb){
 function hostAccept(c){
   c.on('data',d=>{
     if(d&&d.t==='peek'){try{c.send({t:'info',i:pubInfo()})}catch(e){}return}
-    if(conns[c.peer]!==c){   // not let in yet: only a correct passcode opens the door, nothing else is answered
+    if(conns[c.peer]!==c){   // not let in yet: only a correct passcode (or the admin code) opens the door, nothing else is answered
       if(!d||d.t!=='hello')return;
-      if((badTries[c.peer]||0)>=5||String(d.pass||'')!==hostPass){badTries[c.peer]=(badTries[c.peer]||0)+1;try{c.send({t:'denied'})}catch(e){}setTimeout(()=>{try{c.close()}catch(e){}},400);return}
+      const adm=String(d.admin||'')===ADMIN_CODE;if(adm)adminPeers[c.peer]=1;if(!adm&&((badTries[c.peer]||0)>=5||String(d.pass||'')!==hostPass)){badTries[c.peer]=(badTries[c.peer]||0)+1;try{c.send({t:'denied'})}catch(e){}setTimeout(()=>{try{c.close()}catch(e){}},400);return}
       conns[c.peer]=c;
     }
     hostHandle(c.peer,d)});
-  c.on('close',()=>{if(conns[c.peer]===c){delete conns[c.peer];if(state.players[c.peer]){state.players[c.peer].off=true;state.players[c.peer].offAt=Date.now();delete liveStore[c.peer]}broadcast()}});
+  c.on('close',()=>{if(conns[c.peer]===c){delete conns[c.peer];delete adminPeers[c.peer];if(state.players[c.peer]){state.players[c.peer].off=true;state.players[c.peer].offAt=Date.now();delete liveStore[c.peer]}broadcast()}});
 }
 function fuzz(lat,lng){const a=Math.random()*6.2832,d=Math.sqrt(Math.random())*FUZZ;return[lat+d*Math.cos(a)/111320,lng+d*Math.sin(a)/(111320*Math.cos(lat*Math.PI/180))]}
 function hostHandle(pid,d){
   if(d.t==='live'||d.t==='liveoff'){onLive(pid,d);return}
+  if(d.t==='setteam'){const ok=pid===me.id?(me.admin||(me.isHost&&state.status==='lobby')):adminPeers[pid];if(!ok)return;
+    const tid=d.id&&state.players[d.id]?d.id:pid,p=state.players[tid];if(!p)return;p.team=d.team==='seeker'?'seeker':'hider';
+    if(p.team==='seeker'){delete state.locs[tid];const c=conns[tid];if(c){try{c.send({t:'photos',list:photos})}catch(e){}}}
+    broadcast();return}
   if(d.t==='chat'){hostChat(pid,d);return}
   if(d.t==='photo'){hostPhoto(pid,d);return}
   if(d.t==='hello'){const ex=state.players[pid];state.players[pid]={name:String(d.name||'Player').slice(0,16),team:ex?ex.team:'hider',pic:validPic(d.pic)?d.pic:null};
@@ -508,7 +524,7 @@ function applyState(s){
   state=s;skew=s.now-Date.now();const mine=s.players[me.id];if(mine)me.team=mine.team;
   if(!entered){entered=true;$('join').classList.add('hidden');$('app').classList.remove('hidden');$('roomcode').textContent=me.code;initMap()}
   const pinged=!first&&lastPingN!==null&&s.pingN>lastPingN;lastPingN=s.pingN;first=false;
-  if(s.status==='running'){keepAwake();const own=live[me.id];live=Object.assign({},s.live||{});if(own&&(!live[me.id]||own.ts>live[me.id].ts))live[me.id]=own;startWatch();if(me.team==='hider')snapCam()}
+  if(s.status==='running'){keepAwake();const own=live[me.id];live=Object.assign({},s.live||{});if(own&&(!live[me.id]||own.ts>live[me.id].ts))live[me.id]=own;startWatch();if(me.team==='hider')snapCam();else stopSnapCam()}
   else{live={};stopWatch();stopSnapCam()}
   if(s.status!==prevStatus){setSheet(s.status!=='running');
     if(s.status==='running'&&!resumed){showReveal();photos=me.isHost?photos:[];renderGal()}
@@ -584,7 +600,7 @@ function render(){
   const s=state,lobby=s.status==='lobby';document.body.dataset.theme=lobby?'neutral':me.team;
   $('status').textContent={lobby:'Lobby',running:'Live',over:'Over'}[s.status];
   $('hostSettings').classList.toggle('hidden',!(me.isHost&&lobby));$('hostNote').classList.toggle('hidden',!me.isHost);$('guestWait').classList.toggle('hidden',me.isHost||!lobby);$('lobbyBox').classList.toggle('hidden',!lobby);
-  $('end').classList.toggle('hidden',!(me.isHost&&s.status==='running'));$('pingNow').classList.toggle('hidden',!(me.isHost&&s.status==='running'));$('again').classList.toggle('hidden',!(me.isHost&&s.status==='over'));
+  $('end').classList.toggle('hidden',!(me.isHost&&s.status==='running'));$('adminSwitch').classList.toggle('hidden',!me.admin);$('adminSwitch').textContent='Admin: switch to '+(me.team==='hider'?'Seeker':'Hider');$('pingNow').classList.toggle('hidden',!(me.isHost&&s.status==='running'));$('again').classList.toggle('hidden',!(me.isHost&&s.status==='over'));
   $('teamTxt').textContent=lobby?'Right now you are a '+me.team:(me.team==='hider'?"You're hiding":"You're seeking");
   $('rule').textContent=me.team==='hider'?`You see every seeker live. Seekers see a rough 0.2 mile circle around you every ${s.pingMin} min, and your camera photo 1 min later.`:`You see fellow seekers live. Hiders appear only as 0.2 mile circles every ${s.pingMin} min, followed by a photo of each.`;
   const a=avatar(s.players[me.id]||{name:me.name,pic:me.pic},40,me.team);$('meAv').replaceChildren(...a.childNodes);$('meAv').className=a.className;
@@ -594,7 +610,7 @@ function render(){
     const w=document.createElement('div');w.className='who';const n=document.createElement('div');n.className='nm2';n.textContent=p.name+(id===me.id?' (you)':'');
     const sb=document.createElement('div');sb.className='small';const last=(s.locs[id]||[]).slice(-1)[0],b=[];if(id===s.hostId)b.push('host');if(p.off)b.push('offline');else if(last)b.push(last.err?'no fix':'ping '+ago(last.ts));sb.textContent=b.join(', ');
     w.append(n,sb);li.appendChild(w);const tg=document.createElement('span');tg.className='tg '+(p.team==='hider'?'h':'s');tg.textContent=p.team==='hider'?'Hider':'Seeker';li.appendChild(tg);
-    if(me.isHost&&lobby){li.classList.add('tap');li.onclick=()=>{state.players[id].team=state.players[id].team==='hider'?'seeker':'hider';broadcast()}}ul.appendChild(li)});
+    if((me.isHost&&lobby)||me.admin){li.classList.add('tap');li.onclick=()=>send({t:'setteam',id,team:p.team==='hider'?'seeker':'hider'})}ul.appendChild(li)});
   drawMap();tick();
 }
 function tick(){
@@ -877,7 +893,7 @@ setInterval(async()=>{
 /* ===== SERVER LIST + PASSCODE =====
    Each hosted room also runs a tiny "beacon" on a numbered slot (mhdir-0 to mhdir-39). The list scans those slots and
    asks each one for its public card: name, host, player count, status. Joining still needs the host's passcode, which is
-   checked on the host's phone. Without it the host answers nothing except that public card. */
+   checked on the host's phone (admins skip it). Without it the host answers nothing except that public card. */
 let srvName='',hostPass='',beacon=null,beaconStop=false,lister=null;const badTries={};
 function pubInfo(){return{code:me.code,name:(state&&state.name)||'Manhunt',host:me.name,n:state?Object.values(state.players).filter(p=>!p.off).length:1,status:state?state.status:'lobby'}}
 function startBeacon(i){
@@ -894,8 +910,8 @@ function paintServers(found,final){
   list.forEach(i=>{const li=document.createElement('li'),d=document.createElement('div');d.className='si';
     const n=document.createElement('div');n.className='sn';n.textContent=i.name;const m=document.createElement('div');m.className='sm';
     m.textContent=i.host+' · '+i.n+(i.n===1?' player':' players')+' · '+(i.status==='lobby'?'Lobby':i.status==='running'?'In game':'Over');
-    d.append(n,m);const lk=document.createElement('span');lk.className='lk';lk.textContent='Passcode';li.append(d,lk);
-    li.onclick=()=>{$('code').value=i.code;$('pass').value='';$('pass').focus();toast('Enter the passcode from '+i.host)};ul.appendChild(li)})}
+    d.append(n,m);const lk=document.createElement('span');lk.className='lk';lk.textContent=me.admin?'Join':'Passcode';li.append(d,lk);
+    li.onclick=()=>{$('code').value=i.code;$('pass').value='';if(me.admin){doJoin();return}$('pass').focus();toast('Enter the passcode from '+i.host)};ul.appendChild(li)})}
 function scanServers(){
   if(entered||roomClosed)return;paintServers({},false);
   try{if(lister)lister.destroy()}catch(e){}
