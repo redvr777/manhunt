@@ -417,6 +417,9 @@ body[data-theme=seeker]{--map:invert(1) sepia(1) hue-rotate(150deg) brightness(.
           <div><label class="l">Hide min</label><input type="number" id="hideMin" value="5" min="0" max="120"></div>
           <div><label class="l">Ping every</label><input type="number" id="pingMin" value="2" min="1" max="60"></div>
         </div>
+        <label class="l" for="zoneRadius">Playing circle radius (meters)</label><input type="number" id="zoneRadius" value="250" min="25" max="10000">
+        <button class="btn ghost" id="setZone" style="margin-top:10px">Set circle center to my location</button>
+        <div class="small" id="zoneStatus">Set the center at the playing area's middle. Players outside the circle trigger a group location alert.</div>
         <div style="display:flex;gap:8px;margin-top:14px"><button class="btn ghost" id="rand">Randomize</button><button class="btn" id="start">Start game</button></div>
         <div class="small" style="margin-top:8px">Use the Make seeker / Make hider buttons next to each player below.</div>
       </div>
@@ -486,6 +489,7 @@ const me={id:null,name:'',team:'hider',isHost:false,code:'',pic:null};
 let peer,hostConn=null,localStream=null,snapStream=null,state=null,skew=0,entered=false,lastPingN=null,first=true,prevStatus=null,sheetOpen=false;
 let liveStore={},live={},conns={},calls={},audioEls={},photos=[],chatLog=[],chatMsgs=[];
 let watchId=null,lastFix=null,lastSent=0,watchErr=false,resumed=false,reconBusy=false,fitted=false,map,layerP,layerL,meMarker;
+let zoneAlerts={},zoneAlarmTimer=null,zoneAlarmOn=false,zoneWasOutside=false,zoneLastReport=0;
 const store={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
 const uid=(()=>{let u=store.get('mh_uid');if(!u){u=Math.random().toString(36).slice(2,10);store.set('mh_uid',u)}return u})();
 const secureOk=window.isSecureContext&&location.protocol!=='file:'; if(!secureOk)$('insecure').classList.remove('hidden');
@@ -751,7 +755,7 @@ async function startHost(code,restore){if(!permsOk){afterGate=()=>startHost(code
     toast(e.type==='unavailable-id'?'Code clash or old host still connected. Try again.':'Connection error: '+e.type)});
   peer.on('open',id=>{me.id=id;
     if(restore&&restore.players){state=restore;state.hostId=id;Object.keys(state.players).forEach(k=>{if(k!==id){state.players[k].off=true;state.players[k].offAt=Date.now()}});state.players[id]=Object.assign(state.players[id]||{},{name:me.name,pic:me.pic,off:false})}
-    else state={name:srvName,status:'lobby',hostId:id,order:[id],players:{[id]:{name:me.name,team:'hider',pic:me.pic}},hideMin:5,pingMin:2,startAt:0,nextPing:0,photoAt:0,pingN:0,locs:{}};
+    else state={name:srvName,status:'lobby',hostId:id,order:[id],players:{[id]:{name:me.name,team:'hider',pic:me.pic}},hideMin:5,pingMin:2,startAt:0,nextPing:0,photoAt:0,pingN:0,locs:{},zone:null,zoneAlerts:{}};
     broadcast()});
   commonPeer();
 }
@@ -791,7 +795,7 @@ function connectToHost(hid,cb){
   c.on('data',d=>{
     if(d.t==='state'){if(!done){done=true;clearTimeout(to);hostConn=c;cb&&cb(true)}const sg=JSON.stringify(Object.assign({},d.s,{now:0}));if(sg!==lastSig||first||d.s.revision!==state?.revision){lastSig=sg;applyState(d.s)}else skew=d.s.now-Date.now()}
     else if(d.t==='ping')doPing();else if(d.t==='snap')doSnap(d.n);else if(d.t==='talking')setTalker(d.id,d.on);else if(d.t==='foundmsg')onFoundMsg(d);else if(d.t==='foundask')onFoundAsk(d);else if(d.t==='note')toast(d.m,3500);else if(d.t==='founddenied')toast(d.name+' says they were not found.',4000);
-    else if(d.t==='live'){live[d.id]=d.l;drawLive()}else if(d.t==='liveoff'){delete live[d.id];drawLive()}
+    else if(d.t==='zonealert')onZoneAlert(d.a);else if(d.t==='live'){live[d.id]=d.l;drawLive()}else if(d.t==='liveoff'){delete live[d.id];drawLive()}
     else if(d.t==='photo')addPhoto(d.p,false);else if(d.t==='photos')(d.list||[]).forEach(p=>addPhoto(p,true));
     else if(d.t==='chat')addChat(d.m);else if(d.t==='chathist')(d.list||[]).forEach(m=>addChat(m,true));
     else if(d.t==='chatreset')resetTeamChat();else if(d.t==='closed'){closeRoom(d.why)}else if(d.t==='denied'){me.denied=true;fail()}else if(d.t==='wait')fail()});
@@ -812,6 +816,10 @@ function hostAccept(c){
 }
 function fuzz(lat,lng){const a=Math.random()*6.2832,d=Math.sqrt(Math.random())*FUZZ;return[lat+d*Math.cos(a)/111320,lng+d*Math.sin(a)/(111320*Math.cos(lat*Math.PI/180))]}
 function hostHandle(pid,d){
+  if(d.t==='zoneconfig'){if(pid!==me.id||!me.isHost)return;state.zone=d.zone;broadcast();return}
+  if(d.t==='zonecheck'){const p=state.players[pid];if(!p||state.status!=='running')return;const old=zoneAlerts[pid];if(d.out){zoneAlerts[pid]={id:pid,name:p.name,lat:d.lat,lng:d.lng,out:true,ts:Date.now()};}
+    else if(old){zoneAlerts[pid]={...old,lat:d.lat,lng:d.lng,out:false,ts:Date.now(),until:Date.now()+15000};}
+    state.zoneAlerts=zoneAlerts;const msg={t:'zonealert',a:zoneAlerts[pid]};Object.values(conns).forEach(c=>{try{c.send(msg)}catch(e){}});if(pid===me.id)onZoneAlert(msg.a);broadcast();return}
   if(d.t==='talk'){onTalk(pid,d);return}
   if(d.t==='found'){onFound(pid,d);return}
   if(d.t==='foundreq'){onFoundReq(pid,d);return}
@@ -929,7 +937,7 @@ function pulse(ll,col,r0,r1){if(!map)return;const c=L.circle(ll,{radius:r0,color
   (function st(t){const k=Math.min(1,(t-t0)/1400),e=1-Math.pow(1-k,3);c.setRadius(r0+(r1-r0)*e);c.setStyle({opacity:1-k});if(k<1)requestAnimationFrame(st);else c.remove()})(t0)}
 function startWatch(){
   if(watchId!==null||!navigator.geolocation||!$('liveToggle').checked)return;
-  watchId=navigator.geolocation.watchPosition(p=>{lastFix={lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy,ts:Date.now()};
+  watchId=navigator.geolocation.watchPosition(p=>{lastFix={lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy,ts:Date.now()};zoneCheck(lastFix.lat,lastFix.lng);
     if(!compassOn&&p.coords.speed>1&&p.coords.heading!=null&&!isNaN(p.coords.heading))setHeading(p.coords.heading);
     if(Date.now()-lastSent<4000)return;lastSent=Date.now();const hd=heading===null?undefined:Math.round(heading);live[me.id]={lat:lastFix.lat,lng:lastFix.lng,acc:lastFix.acc,hd,ts:Date.now()+skew};drawLive();send({t:'live',lat:lastFix.lat,lng:lastFix.lng,acc:lastFix.acc,hd})},
     e=>{if(!watchErr){watchErr=true;toast('Live location off: '+geoHelp(geoErr(e)),9000)}},{enableHighAccuracy:true,maximumAge:2000,timeout:20000})}
@@ -938,6 +946,13 @@ $('liveToggle').onchange=()=>{if($('liveToggle').checked){if(state&&state.status
 function geoErr(e){return !secureOk?'insecure':!navigator.geolocation?'unsupported':e&&e.code===1?'denied':e&&e.code===2?'unavailable':e&&e.code===3?'timeout':'error'}
 function geoHelp(c){return({insecure:'Open this page over https, not a saved file.',denied:'Location is blocked. Allow it for this site and turn on Location Services.',unavailable:'No GPS fix. Check Location Services.',timeout:'Location timed out. Try open sky.',unsupported:'No location support in this browser.',error:'Location failed.'})[c]||'Location failed.'}
 function getFix(ok,bad){if(!secureOk||!navigator.geolocation){bad(geoErr());return}navigator.geolocation.getCurrentPosition(ok,e=>bad(geoErr(e)),{enableHighAccuracy:true,timeout:20000,maximumAge:0})}
+function zoneDistance(a,b){return L.latLng(a.lat,a.lng).distanceTo(L.latLng(b.lat,b.lng))}
+function zoneRadius(){return Math.max(25,Math.min(10000,Number($('zoneRadius')?.value)||250))}
+$('setZone').onclick=()=>{if(!me.isHost)return;getFix(p=>{const zone={lat:p.coords.latitude,lng:p.coords.longitude,radius:zoneRadius()};state.zone=zone;send({t:'zoneconfig',zone});broadcast();$('zoneStatus').textContent='Circle set: '+zone.radius+' m radius.';toast('Playing circle center saved')},e=>toast('Could not set circle: '+geoHelp(e)))};
+function zoneCheck(lat,lng){if(!state||state.status!=='running'||!state.zone||!$('liveToggle').checked)return;const out=zoneDistance({lat,lng},state.zone)>Number(state.zone.radius||250);if(out!==zoneWasOutside||Date.now()-zoneLastReport>12000){zoneWasOutside=out;zoneLastReport=Date.now();send({t:'zonecheck',out,lat,lng})}}
+function onZoneAlert(a){if(!a||!a.id)return;zoneAlerts[a.id]=a;syncZoneAlarm();drawLive();if(a.out)toast(a.name+' LEFT THE PLAYING CIRCLE! Location shared with everyone.',6000);else toast(a.name+' returned. Location will remain visible for 15 seconds.',4500)}
+function syncZoneAlarm(){const active=Object.values(zoneAlerts).some(a=>a.out);if(active&&!zoneAlarmTimer){const beep=()=>{if(!Object.values(zoneAlerts).some(a=>a.out)){clearInterval(zoneAlarmTimer);zoneAlarmTimer=null;return}if($('soundToggle')?.checked){audio();try{const v=V(),t=A.currentTime;note(v,t,{f:880,f2:620,d:.28,g:.22,type:'square',a:.01});note(v,t+.32,{f:880,f2:620,d:.28,g:.22,type:'square',a:.01})}catch(e){}}};beep();zoneAlarmTimer=setInterval(beep,900)}else if(!active&&zoneAlarmTimer){clearInterval(zoneAlarmTimer);zoneAlarmTimer=null}}
+setInterval(()=>{let changed=false;Object.keys(zoneAlerts).forEach(id=>{const a=zoneAlerts[id];if(!a.out&&a.until&&Date.now()>a.until){delete zoneAlerts[id];changed=true}});if(changed)drawLive();syncZoneAlarm()},1000);
 function doPing(){
   if(!state||state.status!=='running'||me.team!=='hider')return;
   const useLast=()=>{if(lastFix){send({t:'loc',lat:lastFix.lat,lng:lastFix.lng,hd:heading===null?undefined:Math.round(heading)});return true}return false};
@@ -1070,7 +1085,9 @@ function drawLiveNow(){
     if(id!==me.id&&!canSeeLive(me.team,p.team))return;   // seekers never draw a hider's live dot
     const col=p.team==='hider'?HC:SC;
     L.circle([l.lat,l.lng],{radius:Math.max(l.acc||8,5),color:col,weight:1,fillOpacity:.12,interactive:false}).addTo(layerL);
-    L.marker([l.lat,l.lng],{icon:pinIcon(p,id===me.id?'you':ago(l.ts),id,l.hd),interactive:false,zIndexOffset:500}).addTo(layerL)})}
+    L.marker([l.lat,l.lng],{icon:pinIcon(p,id===me.id?'you':ago(l.ts),id,l.hd),interactive:false,zIndexOffset:500}).addTo(layerL)});
+  if(state.zone)L.circle([state.zone.lat,state.zone.lng],{radius:state.zone.radius,color:'#ff5b1f',weight:3,dashArray:'8 8',fillColor:'#ff5b1f',fillOpacity:.05,interactive:false}).addTo(layerL);
+  Object.values(zoneAlerts).forEach(a=>{if(a.out||(a.until&&Date.now()<a.until)){const p=state.players[a.id]||{name:a.name,team:'hider'};L.marker([a.lat,a.lng],{icon:pinIcon(p,a.out?'OUTSIDE!':'RETURNED',a.id),zIndexOffset:1200,interactive:false}).addTo(layerL)}})}
 function fitMap(){if(!map||!state)return false;const pts=[];Object.entries(live).forEach(([id,l])=>{const p=state.players[id];if(id===me.id||(p&&canSeeLive(me.team,p.team)))pts.push([l.lat,l.lng])});
   if(me.team==='seeker')(state.areas||[]).forEach(a=>pts.push([a.clat,a.clng]));if(meMarker)pts.push(meMarker.getLatLng());
   if(pts.length===1)map.setView(pts[0],16);else if(pts.length>1)map.fitBounds(pts,{padding:[90,90],maxZoom:17});return pts.length>0}
