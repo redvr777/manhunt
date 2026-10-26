@@ -361,6 +361,12 @@ body[data-theme=seeker]{--map:invert(1) sepia(1) hue-rotate(150deg) brightness(.
 #foundBox{position:fixed;inset:0;z-index:3900;background:#000d;display:flex;align-items:center;justify-content:center;padding:18px}
 .fcard{width:100%;max-width:380px;background:var(--sf);border-radius:26px 6px 26px 6px;padding:18px;box-shadow:0 0 0 2px var(--hc),0 20px 60px #000}
 #fText{font:800 22px/1.2 var(--disp);margin:10px 0 16px}
+
+#inviteModal{position:fixed;inset:0;z-index:6400;background:#000d;display:flex;align-items:center;justify-content:center;padding:18px}
+.inviteCard{width:100%;max-width:420px;background:var(--sf);color:var(--tx);border:1px solid #ffffff22;border-radius:24px 6px 24px 6px;padding:20px;box-shadow:0 20px 60px #000b}
+#qrBox{width:220px;height:220px;background:#fff;padding:10px;margin:14px auto;border-radius:12px;display:flex;align-items:center;justify-content:center}
+#qrBox img,#qrBox canvas{max-width:100%;max-height:100%}
+#inviteUrl{font-size:13px;overflow-wrap:anywhere;color:var(--mute);padding:10px;background:var(--sf2);border-radius:8px;margin:10px 0}
 </style></head>
 <body data-theme="neutral">
 
@@ -428,7 +434,7 @@ body[data-theme=seeker]{--map:invert(1) sepia(1) hue-rotate(150deg) brightness(.
         <div style="display:flex;gap:8px;margin-top:14px"><button class="btn ghost" id="rand">Randomize</button><button class="btn" id="start">Start game</button></div>
         <div class="small" style="margin-top:8px">Use the Make seeker / Make hider buttons next to each player below.</div>
       </div>
-      <div id="hostNote" class="small hidden" style="margin-top:12px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;color:var(--tx)"><span>Passcode</span><b id="passShow" style="font:900 30px var(--disp);letter-spacing:.2em"></b><button class="btn ghost sm" id="passCopy">Copy</button></div>Only you can see this passcode. Give it to the people you want in. <b>Heads up:</b> you are the server. If you close or leave this page, the room closes for everyone and nobody can rejoin it. Locking the screen or switching apps is fine.</div>
+      <div id="hostNote" class="small hidden" style="margin-top:12px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;color:var(--tx)"><span>Passcode</span><b id="passShow" style="font:900 30px var(--disp);letter-spacing:.2em"></b><button class="btn ghost sm" id="passCopy">Copy</button></div>Use the Invite button to share a link or QR code that skips the passcode. The passcode is still available for manual joining. <b>Heads up:</b> you are the server. If you close or leave this page, the room closes for everyone and nobody can rejoin it. Locking the screen or switching apps is fine.</div>
       <div id="guestWait" class="small" style="margin-top:12px">Waiting for the host to start.</div>
     </div>
     <div id="actions"><button class="btn ghost hidden" id="pingNow">Ping now</button><button class="btn hot hidden" id="end">End game</button><button class="btn hidden" id="again">New round</button></div>
@@ -477,10 +483,12 @@ body[data-theme=seeker]{--map:invert(1) sepia(1) hue-rotate(150deg) brightness(.
 <div id="closed" class="hidden"><h2>ROOM CLOSED</h2><p id="closedMsg"></p><p class="small" style="color:#8f94a0">This room can’t be rejoined. Ask the host to start a new one.</p><button class="btn" id="closedBtn">Back to start</button></div>
 <div id="reveal" class="hidden"><div id="rvWord"></div><div id="rvSub"></div></div>
 <div id="foundBox" class="hidden"><div class="fcard"><div class="stamp">FOUND?</div><div id="fText"></div><div class="row2"><button class="btn ghost" id="fNo">Cancel</button><button class="btn hot" id="fYes">Yes, found</button></div></div></div>
+<div id="inviteModal" class="hidden"><div class="inviteCard"><div style="display:flex;align-items:center;gap:10px"><h2 style="font:900 26px var(--disp);margin:0;flex:1">INVITE PLAYERS</h2><button class="btn ghost sm" id="inviteClose">Close</button></div><p class="small">Share the link or let players scan the QR code. Anyone with this invite link can join without entering the room passcode.</p><div id="qrBox" aria-label="Room invite QR code"></div><div id="inviteUrl"></div><div class="row"><button class="btn" id="copyInvite">Copy invite link</button><button class="btn ghost" id="shareInvite">Share link</button></div><div class="row" style="margin-top:8px"><button class="btn ghost" id="copyRoomCode">Copy room code</button><button class="btn ghost" id="copyPasscode">Copy passcode</button></div></div></div>
 <div id="toast" class="hidden"></div><div id="audios"></div><video id="snapV" playsinline muted autoplay></video>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 const RAD=160.93, FUZZ=80, STILL=50, HC='#ff5b1f', SC='#4cc9ff';   // RAD = 0.1 mile in meters
 const $=id=>document.getElementById(id);
@@ -735,7 +743,7 @@ async function onPic(e){const f=e.target.files[0];if(!f)return;try{me.pic=await 
 $('picIn').onchange=onPic;$('picIn2').onchange=onPic;
 
 /* ===== ADMIN ===== */
-const ADMIN_CODE='476789',adminPeers={};
+const ADMIN_CODE='476789',adminPeers={},peerUids={},kickedUids=new Set();
 me.admin=store.get('mh_admin')==='1';
 function paintAdmin(){$('adminIn').classList.toggle('hidden',me.admin);$('adminTag').classList.toggle('hidden',!me.admin);if(entered&&state)render()}
 $('adminIn').addEventListener('input',()=>{if($('adminIn').value.trim()===ADMIN_CODE){me.admin=true;store.set('mh_admin','1');$('adminIn').value='';paintAdmin();toast('Admin on. No passcode needed, switch teams any time.')}});
@@ -744,7 +752,7 @@ $('adminSwitch').onclick=()=>send({t:'setteam',id:me.id,team:me.team==='hider'?'
 paintAdmin();
 
 /* ===== networking ===== */
-const params=new URLSearchParams(location.search);if(params.get('room'))$('code').value=params.get('room').toUpperCase();
+const params=new URLSearchParams(location.search);if(params.get('room'))$('code').value=params.get('room').toUpperCase();let inviteToken=params.get('invite')||'';
 let recreating=false;
 function commonPeer(){
   peer.on('disconnected',()=>setTimeout(()=>{try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(e){}},1000));
@@ -768,8 +776,8 @@ $('create').onclick=()=>{audio();askNotify();askOrient();me.name=$('name').value
   const ch='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let c='';for(let i=0;i<4;i++)c+=ch[Math.floor(Math.random()*ch.length)];startHost(c)};
 async function doJoin(){if(!permsOk){afterGate=doJoin;showGate();return}audio();askNotify();askOrient();me.name=$('name').value.trim()||'Player';store.set('mh_name',me.name);me.code=$('code').value.trim().toUpperCase();
   if(me.code.length!==4){toast('Enter the 4-letter room code');return}
-  me.pass=$('pass').value.trim();me.denied=false;if(me.pass.length<4&&!me.admin){toast('Enter the passcode from the host');return}
-  await getMic();store.set('mh_sess',JSON.stringify({code:me.code,host:false,pass:me.pass,ts:Date.now()}));newGuestPeer(0)}
+  me.pass=$('pass').value.trim();me.invite=inviteToken;me.denied=false;if(me.pass.length<4&&!me.admin&&!me.invite){toast('Enter the passcode or open the host invite link');return}
+  await getMic();store.set('mh_sess',JSON.stringify({code:me.code,host:false,pass:me.pass,invite:me.invite||'',ts:Date.now()}));newGuestPeer(0)}
 $('joinbtn').onclick=doJoin;
 function newGuestPeer(tries){
   try{if(peer&&!peer.destroyed)peer.destroy()}catch(e){}
@@ -796,14 +804,14 @@ function newGuestPeer(tries){
 function connectToHost(hid,cb){
   const c=peer.connect(hid,{reliable:true});let done=false;
   const fail=()=>{if(done)return;done=true;clearTimeout(to);try{c.close()}catch(e){}cb&&cb(false)};const to=setTimeout(fail,15000);
-  c.on('open',()=>c.send({t:'hello',name:me.name,pic:me.pic,pass:me.pass,admin:me.admin?ADMIN_CODE:''}));
+  c.on('open',()=>c.send({t:'hello',name:me.name,pic:me.pic,pass:me.pass,invite:me.invite||'',uid:uid,admin:me.admin?ADMIN_CODE:''}));
   c.on('data',d=>{
     if(d.t==='state'){if(!done){done=true;clearTimeout(to);hostConn=c;cb&&cb(true)}const sg=JSON.stringify(Object.assign({},d.s,{now:0}));if(sg!==lastSig||first||d.s.revision!==state?.revision){lastSig=sg;applyState(d.s)}else skew=d.s.now-Date.now()}
     else if(d.t==='ping')doPing();else if(d.t==='snap')doSnap(d.n);else if(d.t==='talking')setTalker(d.id,d.on);else if(d.t==='foundmsg')onFoundMsg(d);else if(d.t==='foundask')onFoundAsk(d);else if(d.t==='note')toast(d.m,3500);else if(d.t==='founddenied')toast(d.name+' says they were not found.',4000);
     else if(d.t==='zoneask')getFix(p=>send({t:'zoneloc',lat:p.coords.latitude,lng:p.coords.longitude}),()=>{});else if(d.t==='zonealert')onZoneAlert(d.a);else if(d.t==='live'){live[d.id]=d.l;drawLive()}else if(d.t==='liveoff'){delete live[d.id];drawLive()}
     else if(d.t==='photo')addPhoto(d.p,false);else if(d.t==='photos')(d.list||[]).forEach(p=>addPhoto(p,true));
     else if(d.t==='chat')addChat(d.m);else if(d.t==='chathist')(d.list||[]).forEach(m=>addChat(m,true));
-    else if(d.t==='chatreset')resetTeamChat();else if(d.t==='closed'){closeRoom(d.why)}else if(d.t==='denied'){me.denied=true;fail()}else if(d.t==='wait')fail()});
+    else if(d.t==='chatreset')resetTeamChat();else if(d.t==='closed'){closeRoom(d.why)}else if(d.t==='kicked'){closeRoom(d.why||'The host removed you from this room.')}else if(d.t==='denied'){me.denied=true;fail()}else if(d.t==='wait')fail()});
   c.on('close',()=>{clearTimeout(to);if(hostConn===c){hostConn=null;onHostLost()}else fail()});c.on('error',fail);
 }
 
@@ -813,16 +821,18 @@ function hostAccept(c){
     if(d&&d.t==='peek'){try{c.send({t:'info',i:pubInfo()})}catch(e){}return}
     if(conns[c.peer]!==c){   // not let in yet: only a correct passcode (or the admin code) opens the door, nothing else is answered
       if(!d||d.t!=='hello')return;
-      const adm=String(d.admin||'')===ADMIN_CODE;if(adm)adminPeers[c.peer]=1;if(!adm&&((badTries[c.peer]||0)>=5||String(d.pass||'')!==hostPass)){badTries[c.peer]=(badTries[c.peer]||0)+1;try{c.send({t:'denied'})}catch(e){}setTimeout(()=>{try{c.close()}catch(e){}},400);return}
-      conns[c.peer]=c;
+      if(d.uid&&kickedUids.has(String(d.uid))){try{c.send({t:'kicked',why:'The host previously removed this player from the room.'})}catch(e){}setTimeout(()=>{try{c.close()}catch(e){}},120);return}
+      const adm=String(d.admin||'')===ADMIN_CODE;const viaInvite=!!hostPass&&String(d.invite||'')===hostPass;if(adm)adminPeers[c.peer]=1;if(!adm&&!viaInvite&&((badTries[c.peer]||0)>=5||String(d.pass||'')!==hostPass)){badTries[c.peer]=(badTries[c.peer]||0)+1;try{c.send({t:'denied'})}catch(e){}setTimeout(()=>{try{c.close()}catch(e){}},400);return}
+      conns[c.peer]=c;peerUids[c.peer]=String(d.uid||'');
     }
     hostHandle(c.peer,d)});
-  c.on('close',()=>{if(conns[c.peer]===c){delete conns[c.peer];delete adminPeers[c.peer];if(state.players[c.peer]){state.players[c.peer].off=true;state.players[c.peer].offAt=Date.now();delete liveStore[c.peer]}broadcast()}});
+  c.on('close',()=>{if(conns[c.peer]===c){delete conns[c.peer];delete adminPeers[c.peer];delete peerUids[c.peer];if(state.players[c.peer]){state.players[c.peer].off=true;state.players[c.peer].offAt=Date.now();delete liveStore[c.peer]}broadcast()}});
 }
 function fuzz(lat,lng){const a=Math.random()*6.2832,d=Math.sqrt(Math.random())*FUZZ;return[lat+d*Math.cos(a)/111320,lng+d*Math.sin(a)/(111320*Math.cos(lat*Math.PI/180))]}
 function hostHandle(pid,d){
   if(d.t==='zoneloc'){if(zoneAsk!==pid||typeof d.lat!=='number'||typeof d.lng!=='number'||!Number.isFinite(d.lat)||!Number.isFinite(d.lng))return;zoneAsk=null;if(zoneAskTimer)clearTimeout(zoneAskTimer);zoneAskTimer=null;applyZoneAt(d.lat,d.lng);return}
   if(d.t==='zoneconfig'){if(pid!==me.id||!me.isHost)return;state.zone=d.zone;broadcast();return}
+  if(d.t==='kick'){if(pid!==me.id||!me.isHost||!d.id||d.id===me.id)return;const target=state.players[d.id],c=conns[d.id];if(!target||!c)return;const kickedUid=peerUids[d.id];if(kickedUid)kickedUids.add(kickedUid);try{c.send({t:'kicked',why:'The host removed you from this room.'})}catch(e){};delete conns[d.id];delete adminPeers[d.id];delete liveStore[d.id];delete live[d.id];target.off=true;target.offAt=Date.now();setTimeout(()=>{try{c.close()}catch(e){}},120);broadcast();toast('Kicked '+target.name,2500);return}
   if(d.t==='zonecheck'){const p=state.players[pid];if(!p||state.status!=='running')return;const old=zoneAlerts[pid];if(d.out){zoneAlerts[pid]={id:pid,name:p.name,lat:d.lat,lng:d.lng,out:true,ts:Date.now()};}
     else if(old){zoneAlerts[pid]={...old,lat:d.lat,lng:d.lng,out:false,ts:Date.now(),until:Date.now()+15000};}
     state.zoneAlerts=zoneAlerts;const msg={t:'zonealert',a:zoneAlerts[pid]};Object.values(conns).forEach(c=>{try{c.send(msg)}catch(e){}});if(pid===me.id)onZoneAlert(msg.a);broadcast();return}
@@ -942,13 +952,46 @@ function flash(){const f=$('flash');f.classList.remove('go');void f.offsetWidth;
 function pulse(ll,col,r0,r1){if(!map)return;const c=L.circle(ll,{radius:r0,color:col,weight:3,fill:false,interactive:false}).addTo(map),t0=performance.now();
   (function st(t){const k=Math.min(1,(t-t0)/1400),e=1-Math.pow(1-k,3);c.setRadius(r0+(r1-r0)*e);c.setStyle({opacity:1-k});if(k<1)requestAnimationFrame(st);else c.remove()})(t0)}
 function startWatch(){
-  if(watchId!==null||!navigator.geolocation||!$('liveToggle').checked)return;
-  watchId=navigator.geolocation.watchPosition(p=>{lastFix={lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy,ts:Date.now()};zoneCheck(lastFix.lat,lastFix.lng);
+  if(watchId!==null||!navigator.geolocation||!$('liveToggle').checked||!state||state.status!=='running')return;
+  watchErr=false;
+  // iOS Safari can stop delivering updates after backgrounding or a temporary GPS timeout.
+  // Use a longer timeout and allow a recent fix while the device warms up.
+  watchId=navigator.geolocation.watchPosition(p=>{
+    const lat=p.coords.latitude,lng=p.coords.longitude,acc=Number.isFinite(p.coords.accuracy)?p.coords.accuracy:9999;
+    if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)return;
+    // Ignore obviously poor fixes when a better recent fix is already available.
+    if(lastFix&&Date.now()-lastFix.ts<12000&&acc>Math.max(250,lastFix.acc*2.5))return;
+    lastFix={lat,lng,acc,ts:Date.now()};zoneCheck(lat,lng);
     if(!compassOn&&p.coords.speed>1&&p.coords.heading!=null&&!isNaN(p.coords.heading))setHeading(p.coords.heading);
-    if(Date.now()-lastSent<4000)return;lastSent=Date.now();const hd=heading===null?undefined:Math.round(heading);live[me.id]={lat:lastFix.lat,lng:lastFix.lng,acc:lastFix.acc,hd,ts:Date.now()+skew};drawLive();send({t:'live',lat:lastFix.lat,lng:lastFix.lng,acc:lastFix.acc,hd})},
-    e=>{if(!watchErr){watchErr=true;toast('Live location off: '+geoHelp(geoErr(e)),9000)}},{enableHighAccuracy:true,maximumAge:2000,timeout:20000})}
-function stopWatch(){if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null}lastFix=null}
+    if(Date.now()-lastSent<4000)return;
+    lastSent=Date.now();const hd=heading===null?undefined:Math.round(heading);
+    live[me.id]={lat,lng,acc,hd,ts:Date.now()+skew};meLL=[lat,lng];
+    if(meMarker){map.removeLayer(meMarker);meMarker=null}
+    drawLive();send({t:'live',lat,lng,acc,hd});
+  },e=>{
+    watchId=null;
+    if(!watchErr){watchErr=true;toast('Live location paused: '+geoHelp(geoErr(e))+' Trying again…',7000)}
+    // Safari sometimes terminates a watch after timeout; recreate it instead of leaving a dead watchId.
+    if($('liveToggle').checked&&state&&state.status==='running')setTimeout(()=>{if(watchId===null&&$('liveToggle').checked&&state&&state.status==='running')startWatch()},5000);
+  },{enableHighAccuracy:true,maximumAge:10000,timeout:60000});
+}
+function stopWatch(){if(watchId!==null&&navigator.geolocation){navigator.geolocation.clearWatch(watchId);watchId=null}lastFix=null}
 $('liveToggle').onchange=()=>{if($('liveToggle').checked){if(state&&state.status==='running')startWatch()}else{stopWatch();delete live[me.id];send({t:'liveoff'});drawLive()}};
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'&&entered&&state&&state.status==='running'&&$('liveToggle').checked){
+    if(watchId===null)startWatch();
+    // Request a fresh fix after returning to Safari; iOS may have suspended the old GPS session.
+    getFix(p=>{
+      const acc=Number.isFinite(p.coords.accuracy)?p.coords.accuracy:9999;
+      lastFix={lat:p.coords.latitude,lng:p.coords.longitude,acc,ts:Date.now()};
+      meLL=[lastFix.lat,lastFix.lng];
+      const hd=heading===null?undefined:Math.round(heading);
+      live[me.id]={lat:lastFix.lat,lng:lastFix.lng,acc,hd,ts:Date.now()+skew};
+      if(meMarker){map.removeLayer(meMarker);meMarker=null}
+      drawLive();send({t:'live',lat:lastFix.lat,lng:lastFix.lng,acc,hd});
+    },()=>{});
+  }
+});
 function geoErr(e){return !secureOk?'insecure':!navigator.geolocation?'unsupported':e&&e.code===1?'denied':e&&e.code===2?'unavailable':e&&e.code===3?'timeout':'error'}
 function geoHelp(c){return({insecure:'Open this page over https, not a saved file.',denied:'Location is blocked. Allow it for this site and turn on Location Services.',unavailable:'No GPS fix. Check Location Services.',timeout:'Location timed out. Try open sky.',unsupported:'No location support in this browser.',error:'Location failed.'})[c]||'Location failed.'}
 function getFix(ok,bad){if(!secureOk||!navigator.geolocation){bad(geoErr());return}navigator.geolocation.getCurrentPosition(ok,e=>bad(geoErr(e)),{enableHighAccuracy:true,timeout:20000,maximumAge:0})}
@@ -1049,7 +1092,7 @@ function render(){
     const sb=document.createElement('div');sb.className='small';const last=(s.locs[id]||[]).slice(-1)[0],b=[];if(id===s.hostId)b.push('host');if(p.off)b.push('offline');else if(last)b.push(last.err?'no GPS fix on last ping':'ping '+ago(last.ts));else if(s.status==='running'&&p.team==='hider')b.push('no ping yet');sb.textContent=b.join(', ');
     w.append(n,sb);li.appendChild(w);const tg=document.createElement('span');tg.className='tg '+(p.team==='hider'?'h':'s');tg.textContent=p.team==='hider'?'Hider':'Seeker';if(s.status==='running'&&p.team==='hider'&&!p.off&&(me.team==='seeker'||id===me.id)){const fb=document.createElement('button');fb.className='btn hot sm';fb.textContent=id===me.id?'I got found':'Found';fb.onclick=ev=>{ev.stopPropagation();askFound(id)};li.appendChild(fb)}li.appendChild(tg);
     if(me.isHost||me.admin){const sw=document.createElement('button');sw.className='btn ghost sm';sw.textContent='Make '+(p.team==='hider'?'seeker':'hider');
-      sw.onclick=ev=>{ev.stopPropagation();send({t:'setteam',id,team:p.team==='hider'?'seeker':'hider'})};li.appendChild(sw)}ul.appendChild(li)});
+      sw.onclick=ev=>{ev.stopPropagation();send({t:'setteam',id,team:p.team==='hider'?'seeker':'hider'})};li.appendChild(sw)}if(me.isHost&&id!==me.id&&!p.off){const kb=document.createElement('button');kb.className='btn hot sm';kb.textContent='Kick';kb.setAttribute('aria-label','Kick '+p.name);kb.onclick=ev=>{ev.stopPropagation();if(confirm('Kick '+p.name+' from this game?'))send({t:'kick',id})};li.appendChild(kb)}ul.appendChild(li)});
   drawMap();tick();paintZoneBox();
 }
 function paintZoneBox(){const on=me.isHost&&state.status!=='over';$('zoneBox').classList.toggle('hidden',!on);if(!on)return;
@@ -1091,8 +1134,9 @@ function drawPings(){
   if(sig===pingSig)return;pingSig=sig;
   layerP.clearLayers();
   Object.values(state.locs).forEach(arr=>{const g=arr.filter(a=>!a.err&&a.clat!==undefined);if(!g.length)return;
-    if(g.length>1)L.polyline(g.map(a=>[a.clat,a.clng]),{color:HC,weight:2,opacity:.35,dashArray:'4 7',interactive:false}).addTo(layerP);
-    g.slice(0,-1).forEach(a=>L.circleMarker([a.clat,a.clng],{radius:3,color:HC,weight:1,fillOpacity:.4,interactive:false}).addTo(layerP))});
+    // Keep the history trail, but don't draw a dot for every old ping: those dots
+    // overlap the current search-area circle and look like duplicate locations.
+    if(g.length>1)L.polyline(g.map(a=>[a.clat,a.clng]),{color:HC,weight:2,opacity:.35,dashArray:'4 7',interactive:false}).addTo(layerP)});
   (state.areas||[]).forEach(ar=>{const c=[ar.clat,ar.clng],items=ar.m.map(x=>({id:x.id,n:x.n,ts:x.ts,hd:x.hd,p:state.players[x.id]||{name:'?'}}));
     if(me.team==='hider'){L.circle(c,{radius:RAD,color:HC,weight:1.5,dashArray:'12 9',fillColor:HC,fillOpacity:.05,interactive:false}).addTo(layerP);
       const lb=document.createElement('div');lb.className='rad dim';lb.textContent='Seekers see '+items.map(i=>i.p.name).join(', ')+' here';
@@ -1116,13 +1160,38 @@ function fitMap(){if(!map||!state)return false;const pts=[];Object.entries(live)
 $('fit').onclick=fitMap;
 /* locator: drops your avatar on the map with a cone showing which way you are looking */
 let meLL=null;
-function drawMeMarker(){if(!map||!meLL)return;if(meMarker)map.removeLayer(meMarker);
-  meMarker=L.marker(meLL,{icon:pinIcon({name:me.name,pic:me.pic,team:me.team},'you',me.id,heading===null?undefined:heading),interactive:false,zIndexOffset:900}).addTo(map)}
-$('locme').onclick=()=>{askOrient();getFix(p=>{meLL=[p.coords.latitude,p.coords.longitude];drawMeMarker();map.setView(meLL,17);
-  if(heading===null)toast('Move your phone or walk a bit so the map can tell which way you face.',4000)},c=>toast(geoHelp(c),9000))};
+function drawMeMarker(){
+  if(!map||!meLL)return;
+  // The live layer already draws the player's avatar. Never stack a second "you" pin on it.
+  if(live[me.id]){if(meMarker){map.removeLayer(meMarker);meMarker=null}return}
+  if(meMarker)map.removeLayer(meMarker);
+  meMarker=L.marker(meLL,{icon:pinIcon({name:me.name,pic:me.pic,team:me.team},'you',me.id,heading===null?undefined:heading),interactive:false,zIndexOffset:900}).addTo(map)
+}
+$('locme').onclick=()=>{askOrient();getFix(p=>{
+  meLL=[p.coords.latitude,p.coords.longitude];
+  const acc=Number.isFinite(p.coords.accuracy)?p.coords.accuracy:9999;
+  // Reuse the live player marker if present instead of adding a duplicate marker.
+  if(entered&&state&&state.status==='running'&&$('liveToggle').checked){
+    lastFix={lat:meLL[0],lng:meLL[1],acc,ts:Date.now()};
+    live[me.id]={lat:meLL[0],lng:meLL[1],acc,hd:heading===null?undefined:Math.round(heading),ts:Date.now()+skew};
+    drawLive();send({t:'live',lat:meLL[0],lng:meLL[1],acc,hd:live[me.id].hd});
+  }
+  drawMeMarker();map.setView(meLL,17);
+  if(heading===null)toast('Move your phone or walk a bit so the map can tell which way you face.',4000)
+},c=>toast(geoHelp(c),9000))};
 $('testLoc').onclick=()=>{const e=$('geoStatus');e.textContent='Checking…';getFix(p=>{e.textContent='Location works (within '+Math.round(p.coords.accuracy)+' m).'},c=>{e.textContent=geoHelp(c)})};
-$('share').onclick=async()=>{const url=location.origin+location.pathname+'?room='+me.code,text='Join my manhunt game. Room '+me.code+', passcode '+(me.isHost?hostPass:me.pass);
-  try{if(navigator.share)await navigator.share({title:'Manhunt',text,url});else{await navigator.clipboard.writeText(text+' '+url);toast('Invite copied')}}catch(e){}};
+function inviteUrl(){const u=new URL(location.href);u.search='';u.hash='';u.searchParams.set('room',me.code);if(me.isHost&&hostPass)u.searchParams.set('invite',hostPass);else if(me.invite)u.searchParams.set('invite',me.invite);return u.toString()}
+function makeInviteQR(){const box=$('qrBox');box.replaceChildren();const url=inviteUrl();$('inviteUrl').textContent=url;
+  if(window.QRCode){new QRCode(box,{text:url,width:200,height:200,colorDark:'#111111',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M})}
+  else{const msg=document.createElement('div');msg.className='small';msg.style.color='#111';msg.textContent='QR generator unavailable. Copy the invite link below.';box.appendChild(msg)}}
+$('share').onclick=()=>{if(!entered||!me.code){toast('Join a room first');return}makeInviteQR();$('inviteModal').classList.remove('hidden')};
+$('inviteClose').onclick=()=>$('inviteModal').classList.add('hidden');
+$('inviteModal').addEventListener('click',e=>{if(e.target===$('inviteModal'))$('inviteModal').classList.add('hidden')});
+async function copyTextSafe(t,label){try{await navigator.clipboard.writeText(t);toast(label+' copied')}catch(e){prompt('Copy '+label,t)}}
+$('copyInvite').onclick=()=>copyTextSafe(inviteUrl(),'Invite link');
+$('shareInvite').onclick=async()=>{const url=inviteUrl();try{if(navigator.share)await navigator.share({title:'Join my Manhunt game',text:'Open this invite link to join without a passcode.',url});else await copyTextSafe(url,'Invite link')}catch(e){}};
+$('copyRoomCode').onclick=()=>copyTextSafe(me.code,'Room code');
+$('copyPasscode').onclick=()=>copyTextSafe(me.isHost?hostPass:(me.pass||''),'Passcode');
 
 /* ===== compass: which way the phone is facing, drawn as a cone on your dot ===== */
 let heading=null,compassOn=false,oriBound=false;
@@ -1466,6 +1535,6 @@ scanServers();
 (function(){try{const s=JSON.parse(store.get('mh_sess')||'null'),want=params.get('room')?params.get('room').toUpperCase():null;
   if(s&&s.code&&Date.now()-s.ts<12*3600e3&&(!want||want===s.code)){resumed=true;me.name=store.get('mh_name')||'Player';toast('Rejoining '+s.code+'…',5000);
     if(s.host){store.set('mh_sess','');store.set('mh_host','');toast('Your last room closed when you left it.',5000)}
-    else{$('code').value=s.code;$('pass').value=s.pass||'';doJoin()}
+    else{$('code').value=s.code;$('pass').value=s.pass||'';inviteToken=s.invite||inviteToken;doJoin()}
     setTimeout(()=>{resumed=false},8000)}}catch(e){}})();
 </script></body></html>
