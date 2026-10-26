@@ -418,6 +418,13 @@ body[data-theme=seeker]{--map:invert(1) sepia(1) hue-rotate(150deg) brightness(.
       <label class="l" for="zoneRadius">Playing circle radius (miles)</label>
       <div class="row" style="align-items:center"><input type="number" id="zoneRadius" value="0.25" min="0.02" max="6" step="0.01" inputmode="decimal" style="flex:0 0 38%"><input type="range" id="zoneSlider" min="0.02" max="3" step="0.01" value="0.25" style="flex:1"></div>
       <div class="small" style="margin-top:10px"><b>Zone round rules</b> · Round ends after 30 minutes. The zone is required before starting.</div>
+      <div class="well" style="margin:10px 0;padding:12px">
+        <b>GPS ping controls</b>
+        <div class="small" style="margin:5px 0 8px">Each ping sends seekers a rough circle for each hider instead of their live dot. Hider photos are sent to seekers about 1 minute later.</div>
+        <label class="l" for="pingEveryLive">Ping every (minutes)</label>
+        <div class="row" style="align-items:center"><input type="number" id="pingEveryLive" min="1" max="60" value="2" style="flex:1"><button class="btn ghost" id="applyPingEvery" type="button">Apply</button></div>
+        <div class="small" id="pingLiveStatus" style="margin-top:6px">Ping interval follows the lobby setting.</div>
+      </div>
       <label class="l" for="zoneShrinkEvery">Shrink zone every <span id="zoneShrinkLabel">10</span> minutes</label>
       <input type="range" id="zoneShrinkEvery" min="2" max="15" step="1" value="10">
       <label class="l" for="zoneShrinkPct">Shrink size each time: <span id="zoneShrinkPctLabel">25%</span></label>
@@ -951,6 +958,13 @@ function hostTick(){
   }
 }
 $('pingNow').onclick=()=>{if(me.isHost&&state.status==='running')firePing()};
+$('applyPingEvery').onclick=()=>{
+  if(!me.isHost||!state||state.status!=='running')return;
+  const mins=Math.max(1,Math.min(60,Math.round(+$('pingEveryLive').value||2)));
+  state.pingMin=mins;state.nextPing=Date.now()+mins*60000;
+  $('pingEveryLive').value=mins;$('pingLiveStatus').textContent='Updated: next automatic ping in '+mins+' minute'+(mins===1?'':'s')+'.';
+  broadcast();toast('Ping interval updated to every '+mins+' minute'+(mins===1?'':'s')+'.');
+};
 $('start').onclick=()=>{if(!state.zone||!Number.isFinite(state.zone.lat)||!Number.isFinite(state.zone.lng)){toast('Set the required playing zone before starting.');$('zoneBox').classList.remove('hidden');return}
   audio();chatLog=chatLog.filter(m=>m.scope==='all');photos=[];
   state.hideMin=Math.max(0,+$('hideMin').value||0);state.pingMin=Math.max(1,+$('pingMin').value||2);
@@ -1138,7 +1152,7 @@ function render(){
       sw.onclick=ev=>{ev.stopPropagation();send({t:'setteam',id,team:p.team==='hider'?'seeker':'hider'})};li.appendChild(sw)}if(me.isHost&&id!==me.id&&!p.off){const kb=document.createElement('button');kb.className='btn hot sm';kb.textContent='Kick';kb.setAttribute('aria-label','Kick '+p.name);kb.onclick=ev=>{ev.stopPropagation();if(confirm('Kick '+p.name+' from this game?'))send({t:'kick',id})};li.appendChild(kb)}ul.appendChild(li)});
   drawMap();tick();paintZoneBox();
 }
-function paintZoneBox(){const on=me.isHost&&state.status!=='over';$('zoneBox').classList.toggle('hidden',!on);if(!on)return;
+function paintZoneBox(){const on=me.isHost&&state.status!=='over';$('zoneBox').classList.toggle('hidden',!on);if(!on)return; if(document.activeElement!==$('pingEveryLive'))$('pingEveryLive').value=state.pingMin||2; if(state.status==='running')$('pingLiveStatus').textContent='Current interval: every '+(state.pingMin||2)+' minute'+((state.pingMin||2)===1?'':'s')+'. Use “Ping now” for an immediate ping.';
   const sel=$('zoneWho'),ids=state.order.filter(id=>state.players[id]&&!state.players[id].off),sig=ids.map(id=>id+state.players[id].name+state.players[id].team).join();
   if(sel.dataset.sig!==sig){const cur=sel.value;sel.innerHTML='';ids.forEach(id=>{const o=document.createElement('option');o.value=id;o.textContent=state.players[id].name+(id===me.id?' (me)':'')+' · '+state.players[id].team;sel.appendChild(o)});sel.value=ids.includes(cur)?cur:(ids.includes(me.id)?me.id:(ids[0]||''));sel.dataset.sig=sig}
   if(state.zone&&document.activeElement!==$('zoneRadius')){$('zoneRadius').value=(state.zone.radius/MI).toFixed(2);$('zoneSlider').value=Math.min(3,state.zone.radius/MI)}
