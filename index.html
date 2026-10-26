@@ -1594,6 +1594,7 @@ scanServers();
     else{$('code').value=s.code;$('pass').value=s.pass||'';inviteToken=s.invite||inviteToken;doJoin()}
     setTimeout(()=>{resumed=false},8000)}}catch(e){}})();
 
+</script>
 <div id="creditsModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="creditsTitle">
   <div class="creditsCard">
     <div style="display:flex;align-items:flex-start;gap:12px">
@@ -1627,5 +1628,4 @@ scanServers();
   modal.addEventListener('click',e=>{if(e.target===modal)hide()});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.classList.contains('hidden'))hide()});
 })();
-</script>
 </script></body></html>
