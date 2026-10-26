@@ -753,6 +753,14 @@ paintAdmin();
 
 /* ===== networking ===== */
 const params=new URLSearchParams(location.search);if(params.get('room'))$('code').value=params.get('room').toUpperCase();let inviteToken=params.get('invite')||'';
+// Invite links and QR codes carry the room's join token. Hide the manual passcode
+// field when a valid invite token is present; the token is sent in the hello packet.
+function syncInviteJoinUI(){
+  const passInput=$('pass'),passLabel=document.querySelector('label[for="pass"]');
+  if(inviteToken){if(passInput){passInput.value='';passInput.placeholder='Included in invite link';passInput.disabled=true;passInput.style.display='none'}if(passLabel)passLabel.style.display='none';$('joinbtn').textContent='Join with invite';}
+  else {if(passInput){passInput.disabled=false;passInput.style.display='';passInput.placeholder='000000'}if(passLabel)passLabel.style.display='';$('joinbtn').textContent='Join game';}
+}
+syncInviteJoinUI();
 let recreating=false;
 function commonPeer(){
   peer.on('disconnected',()=>setTimeout(()=>{try{if(peer&&peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(e){}},1000));
@@ -779,6 +787,8 @@ async function doJoin(){if(!permsOk){afterGate=doJoin;showGate();return}audio();
   me.pass=$('pass').value.trim();me.invite=inviteToken;me.denied=false;if(me.pass.length<4&&!me.admin&&!me.invite){toast('Enter the passcode or open the host invite link');return}
   await getMic();store.set('mh_sess',JSON.stringify({code:me.code,host:false,pass:me.pass,invite:me.invite||'',ts:Date.now()}));newGuestPeer(0)}
 $('joinbtn').onclick=doJoin;
+// Keep invite UI correct if the page is reused or its query string is changed by navigation.
+window.addEventListener('pageshow',()=>{const q=new URLSearchParams(location.search);if(q.get('invite'))inviteToken=q.get('invite');syncInviteJoinUI()});
 function newGuestPeer(tries){
   try{if(peer&&!peer.destroyed)peer.destroy()}catch(e){}
   peer=new Peer('mhp-'+me.code+'-'+uid,PEER_OPTS);
@@ -1180,7 +1190,7 @@ $('locme').onclick=()=>{askOrient();getFix(p=>{
   if(heading===null)toast('Move your phone or walk a bit so the map can tell which way you face.',4000)
 },c=>toast(geoHelp(c),9000))};
 $('testLoc').onclick=()=>{const e=$('geoStatus');e.textContent='Checking…';getFix(p=>{e.textContent='Location works (within '+Math.round(p.coords.accuracy)+' m).'},c=>{e.textContent=geoHelp(c)})};
-function inviteUrl(){const u=new URL(location.href);u.search='';u.hash='';u.searchParams.set('room',me.code);if(me.isHost&&hostPass)u.searchParams.set('invite',hostPass);else if(me.invite)u.searchParams.set('invite',me.invite);return u.toString()}
+function inviteUrl(){const u=new URL(location.href);u.search='';u.hash='';u.searchParams.set('room',me.code);const token=(me.isHost&&hostPass)?hostPass:(me.invite||inviteToken);if(token)u.searchParams.set('invite',token);return u.toString()}
 function makeInviteQR(){const box=$('qrBox');box.replaceChildren();const url=inviteUrl();$('inviteUrl').textContent=url;
   if(window.QRCode){new QRCode(box,{text:url,width:200,height:200,colorDark:'#111111',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M})}
   else{const msg=document.createElement('div');msg.className='small';msg.style.color='#111';msg.textContent='QR generator unavailable. Copy the invite link below.';box.appendChild(msg)}}
