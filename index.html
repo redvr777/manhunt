@@ -407,6 +407,9 @@ body[data-theme=seeker]{--map:invert(1) sepia(1) hue-rotate(150deg) brightness(.
 #dirDist{font:900 34px/1 var(--disp)}#dirDir{font-weight:700;color:var(--mute);text-transform:capitalize}
 #dirSteps{list-style:none;margin:8px 0 0;padding:0;overflow:auto;flex:1;min-height:0}
 #dirSteps li{display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--sf2)}#dirSteps .sd{color:var(--mute);white-space:nowrap;font-size:13px}
+/* sitting out */
+#outNote{margin-top:6px;display:inline-block;font:800 14px var(--disp);color:var(--tx);background:var(--sf2);padding:3px 10px;border-radius:10px 3px 10px 3px}
+#players li .tg.o{color:var(--mute)}
 </style></head>
 <body data-theme="neutral">
 
@@ -439,7 +442,7 @@ body[data-theme=seeker]{--map:invert(1) sepia(1) hue-rotate(150deg) brightness(.
   <header id="hud">
     <div>
       <div id="roomTag"><span id="roomcode"></span><span id="status"></span></div>
-      <div id="countlbl">Waiting to start</div><div id="count">--:--</div><div id="snapNote" class="hidden"></div><div id="talkNote" class="hidden"></div>
+      <div id="countlbl">Waiting to start</div><div id="count">--:--</div><div id="snapNote" class="hidden"></div><div id="talkNote" class="hidden"></div><div id="outNote" class="hidden">Sitting out</div>
     </div>
     <div id="tools">
       <button class="tool" id="chatBtn" aria-label="Chat"><svg class="ic" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span id="chatBadge" class="badge hidden">0</span></button>
@@ -488,6 +491,7 @@ body[data-theme=seeker]{--map:invert(1) sepia(1) hue-rotate(150deg) brightness(.
       <div id="guestWait" class="small" style="margin-top:12px">Waiting for the host to start.</div>
     </div>
     <div id="actions"><button class="btn ghost hidden" id="pingNow">Ping now</button><button class="btn hot hidden" id="end">End game</button><button class="btn hidden" id="again">New round</button></div>
+    <button class="btn ghost" id="sitBtn" style="margin-top:10px">Sit out</button>
     <button class="btn ghost" id="leave" style="margin-top:10px">Leave game</button>
     <div id="galWrap" class="hidden"><div class="small" style="margin-top:14px">Hider photos (tap to open)</div><div id="gal"></div></div>
     <div class="small" id="micnote" style="margin-top:8px"></div>
@@ -556,7 +560,7 @@ const PEER_OPTS={debug:0,config:{iceCandidatePoolSize:4,iceServers:[
   {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp','turns:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}]}};
 const NET_ERR=['network','server-error','socket-error','socket-closed'];
 let hostTries=0;
-const me={id:null,name:'',team:'hider',isHost:false,code:'',pic:null};
+const me={id:null,name:'',team:'hider',isHost:false,code:'',pic:null,out:false};
 let peer,hostConn=null,localStream=null,snapStream=null,state=null,skew=0,entered=false,lastPingN=null,first=true,prevStatus=null,sheetOpen=false;
 let liveStore={},live={},conns={},calls={},audioEls={},photos=[],chatLog=[],chatMsgs=[];
 let watchId=null,lastFix=null,lastSent=0,watchErr=false,resumed=false,reconBusy=false,fitted=false,map,layerP,layerL,meMarker;
@@ -904,7 +908,7 @@ function hostHandle(pid,d){
   if(d.t==='zoneloc'){if(zoneAsk!==pid||typeof d.lat!=='number'||typeof d.lng!=='number'||!Number.isFinite(d.lat)||!Number.isFinite(d.lng))return;zoneAsk=null;if(zoneAskTimer)clearTimeout(zoneAskTimer);zoneAskTimer=null;applyZoneAt(d.lat,d.lng);return}
   if(d.t==='zoneconfig'){if(pid!==me.id||!me.isHost)return;state.zone=d.zone;broadcast();return}
   if(d.t==='kick'){if(pid!==me.id||!me.isHost||!d.id||d.id===me.id)return;const target=state.players[d.id],c=conns[d.id];if(!target||!c)return;const kickedUid=peerUids[d.id];if(kickedUid)kickedUids.add(kickedUid);try{c.send({t:'kicked',why:'The host removed you from this room.'})}catch(e){};delete conns[d.id];delete adminPeers[d.id];delete liveStore[d.id];delete live[d.id];target.off=true;target.offAt=Date.now();setTimeout(()=>{try{c.close()}catch(e){}},120);broadcast();toast('Kicked '+target.name,2500);return}
-  if(d.t==='zonecheck'){const p=state.players[pid];if(!p||p.team!=='hider'||state.status!=='running'||state.paused||!state.zone)return;
+  if(d.t==='zonecheck'){const p=state.players[pid];if(!p||p.team!=='hider'||state.status!=='running'||state.paused||!state.zone||p.out)return;
     const now=Date.now(),old=zoneTrack[pid];
     if(d.out){zoneTrack[pid]={out:true,lat:d.lat,lng:d.lng,since:old&&old.out?old.since:now,revealed:old&&old.revealed||false,convertAt:old&&old.convertAt||0};
       if(state.zoneMoveUntil&&now>=state.zoneMoveUntil&&!zoneTrack[pid].revealed){const a={id:pid,name:p.name,lat:d.lat,lng:d.lng,out:true,ts:now};zoneAlerts[pid]=a;zoneTrack[pid].revealed=true;zoneTrack[pid].convertAt=now+30000;Object.values(conns).forEach(c=>{try{c.send({t:'zonealert',a})}catch(e){}});if(pid===me.id)onZoneAlert(a)}
@@ -916,6 +920,12 @@ function hostHandle(pid,d){
   if(d.t==='soslive'){if(!state.sos||pid!==state.sos.id)return;const la=finN(d.lat),ln=finN(d.lng);if(la===null||ln===null)return;state.sos.lat=la;state.sos.lng=ln;broadcast();return}
   if(d.t==='sosoff'){if(!state.sos||(pid!==state.sos.id&&pid!==me.id))return;endSos();broadcast();return}
   if(d.t==='batt'){const p=state.players[pid],l=finN(d.lvl);if(!p||l===null)return;const v=Math.max(0,Math.min(100,Math.round(l))),c=!!d.chg;if(p.batt===v&&p.chg===c)return;p.batt=v;p.chg=c;broadcast();return}
+  if(d.t==='sitout'){const p=state.players[pid];if(!p)return;const on=!!d.on;if(!!p.out===on)return;p.out=on;
+    if(on){delete state.locs[pid];delete liveStore[pid];delete live[pid];delete zoneTrack[pid];delete zoneAlerts[pid];state.zoneAlerts=zoneAlerts;
+      Object.values(conns).forEach(c=>{try{c.send({t:'liveoff',id:pid})}catch(e){}})}
+    const nm={t:'note',m:p.name+(on?' is sitting out':' is back in the game')};
+    Object.entries(conns).forEach(([cid,c])=>{if(cid!==pid){try{c.send(nm)}catch(e){}}});if(pid!==me.id)toast(nm.m,3000);
+    broadcast();return}
   if(d.t==='talk'){onTalk(pid,d);return}
   if(d.t==='found'){onFound(pid,d);return}
   if(d.t==='foundreq'){onFoundReq(pid,d);return}
@@ -928,11 +938,11 @@ function hostHandle(pid,d){
     broadcast();return}
   if(d.t==='chat'){hostChat(pid,d);return}
   if(d.t==='photo'){hostPhoto(pid,d);return}
-  if(d.t==='hello'){const ex=state.players[pid];state.players[pid]={name:String(d.name||'Player').slice(0,16),team:ex?ex.team:'hider',pic:validPic(d.pic)?d.pic:null,batt:ex?ex.batt:undefined,chg:ex?ex.chg:undefined};
+  if(d.t==='hello'){const ex=state.players[pid];state.players[pid]={name:String(d.name||'Player').slice(0,16),team:ex?ex.team:'hider',out:ex?!!ex.out:false,pic:validPic(d.pic)?d.pic:null,batt:ex?ex.batt:undefined,chg:ex?ex.chg:undefined};
     if(!state.order.includes(pid))state.order.push(pid);
     const c=conns[pid],p=state.players[pid];if(c){try{c.send({t:'chathist',list:chatLog.filter(m=>m.scope==='all'||m.team===p.team)});if(p.team==='seeker')c.send({t:'photos',list:photos})}catch(e){}}}
   else if(d.t==='pic'){if(state.players[pid]&&validPic(d.pic))state.players[pid].pic=d.pic}
-  else if(d.t==='loc'){const p=state.players[pid];if(!p||p.team!=='hider'||state.status!=='running')return;
+  else if(d.t==='loc'){const p=state.players[pid];if(!p||p.team!=='hider'||state.status!=='running'||p.out)return;
     const arr=state.locs[pid]=state.locs[pid]||[];
     if(d.err||typeof d.lat!=='number')arr.push({n:state.pingN,err:String(d.err||'error').slice(0,20),ts:Date.now()});
     else{const prev=[...arr].reverse().find(a=>!a.err&&a.lat!==undefined);let cl,cg;
@@ -943,7 +953,7 @@ function hostHandle(pid,d){
 }
 function hostPhoto(pid,d){
   const p=state.players[pid];if(!p||p.team!=='hider'||state.status!=='running')return;
-  const ok=typeof d.img==='string'&&d.img.startsWith('data:image/jpeg')&&d.img.length<90000;
+  if(p.out)return;const ok=typeof d.img==='string'&&d.img.startsWith('data:image/jpeg')&&d.img.length<90000;
   const m={id:pid,name:p.name,pic:p.pic,n:d.n,ts:Date.now(),img:ok?d.img:null};
   photos.push(m);if(photos.length>30)photos.shift();
   Object.entries(conns).forEach(([cid,c])=>{if(state.players[cid]?.team==='seeker'){try{c.send({t:'photo',p:m})}catch(e){}}});
@@ -951,7 +961,7 @@ function hostPhoto(pid,d){
 }
 function onLive(pid,d){
   const p=state.players[pid];if(!p||state.status!=='running')return;
-  if(d.t==='live'){if(typeof d.lat!=='number')return;liveStore[pid]={lat:d.lat,lng:d.lng,acc:d.acc,hd:typeof d.hd==='number'?d.hd:undefined,ts:Date.now()}}else delete liveStore[pid];
+  if(d.t==='live'){if(p.out||typeof d.lat!=='number')return;liveStore[pid]={lat:d.lat,lng:d.lng,acc:d.acc,hd:typeof d.hd==='number'?d.hd:undefined,ts:Date.now()}}else delete liveStore[pid];
   const msg=d.t==='live'?{t:'live',id:pid,l:liveStore[pid]}:{t:'liveoff',id:pid};
   // a seeker's dot goes to everyone; a hider's dot goes only to other hiders, so seekers never receive it
   const sees=team=>canSeeLive(team,p.team,pid);
@@ -960,14 +970,14 @@ function onLive(pid,d){
 }
 function computeAreas(){
   const lf=id=>{const a=state.locs[id]||[];for(let i=a.length-1;i>=0;i--)if(!a[i].err&&a[i].lat!==undefined)return a[i];return null};
-  const hs=[];state.order.forEach(id=>{const p=state.players[id];if(!p||p.team!=='hider')return;const e=lf(id)   // keep the last known circle even if that hider's connection drops for a moment
+  const hs=[];state.order.forEach(id=>{const p=state.players[id];if(!p||p.team!=='hider'||p.out)return;const e=lf(id)   // keep the last known circle even if that hider's connection drops for a moment
 ;if(e)hs.push({id,e,ll:L.latLng(e.lat,e.lng)})});
   const cs=[];hs.forEach(h=>{if(!cs.some(c=>c.distanceTo(h.ll)<=RAD))cs.push(L.latLng(h.e.clat,h.e.clng))});
   return cs.map(c=>({clat:c.lat,clng:c.lng,m:hs.filter(h=>c.distanceTo(h.ll)<=RAD).map(h=>({id:h.id,n:h.e.n,ts:h.e.ts,hd:h.e.hd}))}));
 }
 // Exact hider coordinates never leave the host. Everyone gets only the fuzzed circle data.
 function viewFor(team){
-  const locs={};Object.entries(state.locs).forEach(([id,arr])=>{if(state.players[id]?.team!=='hider')return;locs[id]=arr.map(a=>a.err?{n:a.n,err:a.err,ts:a.ts}:{n:a.n,ts:a.ts,clat:a.clat,clng:a.clng,hd:a.hd})});
+  const locs={};Object.entries(state.locs).forEach(([id,arr])=>{const q=state.players[id];if(!q||q.team!=='hider'||q.out)return;locs[id]=arr.map(a=>a.err?{n:a.n,err:a.err,ts:a.ts}:{n:a.n,ts:a.ts,clat:a.clat,clng:a.clng,hd:a.hd})});
   const lv={};Object.entries(liveStore).forEach(([id,l])=>{const p=state.players[id];if(p&&canSeeLive(team,p.team,id))lv[id]=l});
   return Object.assign({},state,{locs,live:lv,areas:computeAreas(),now:Date.now()});
 }
@@ -999,13 +1009,13 @@ function hostTick(){
     }
     // After the move window closes, reveal any hider still outside; convert them after 30 more seconds if they remain out.
     if(state.zoneMoveUntil&&now>=state.zoneMoveUntil){Object.entries(zoneTrack).forEach(([id,tr])=>{
-      const p=state.players[id];if(!p||p.off||p.team!=='hider'||!tr.out)return;
+      const p=state.players[id];if(!p||p.off||p.out||p.team!=='hider'||!tr.out)return;
       if(!tr.revealed){tr.revealed=true;tr.convertAt=now+30000;const a={id,name:p.name,lat:tr.lat,lng:tr.lng,out:true,ts:now};zoneAlerts[id]=a;Object.values(conns).forEach(c=>{try{c.send({t:'zonealert',a})}catch(e){}});if(id===me.id)onZoneAlert(a)}
       else if(tr.convertAt&&now>=tr.convertAt){p.team='seeker';delete state.locs[id];delete liveStore[id];delete live[id];delete zoneTrack[id];const c=conns[id];if(c){try{c.send({t:'note',m:'You stayed outside the zone and became a seeker.'})}catch(e){}}Object.values(conns).forEach(c=>{try{c.send({t:'note',m:p.name+' became a seeker for staying outside the zone.'})}catch(e){}})}
     })}
     if(now>=state.nextPing){state.nextPing+=state.pingMin*60000;firePing()}
     if(state.photoAt&&now>=state.photoAt){state.photoAt=0;
-      Object.entries(conns).forEach(([id,c])=>{if(state.players[id]?.team==='hider'){try{c.send({t:'snap',n:state.pingN})}catch(e){}}});
+      Object.entries(conns).forEach(([id,c])=>{if(state.players[id]?.team==='hider'&&!state.players[id].out){try{c.send({t:'snap',n:state.pingN})}catch(e){}}});
       if(me.team==='hider')doSnap(state.pingN)}
   }
 }
@@ -1017,7 +1027,7 @@ $('start').onclick=()=>{if(!state.zone||!Number.isFinite(state.zone.lat)||!Numbe
   state.sos=null;state.paused=false;state.locs={};liveStore={};live={};zoneTrack={};zoneAlerts={};state.pingN=0;state.photoAt=0;state.startAt=Date.now();state.roundEndsAt=state.startAt+30*60000;
   state.zoneCycle=1;state.zoneMoveUntil=0;state.zoneNextShrinkAt=state.startAt+state.zoneRules.intervalMin*60000;
   state.nextPing=Date.now()+(state.hideMin===0?1000:state.hideMin*60000);state.status='running';broadcast();keepAwake()};
-$('rand').onclick=()=>{const ids=Object.keys(state.players).filter(id=>!state.players[id].off);
+$('rand').onclick=()=>{const ids=Object.keys(state.players).filter(id=>!state.players[id].off&&!state.players[id].out);
   for(let i=ids.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ids[i],ids[j]]=[ids[j],ids[i]]}
   const k=Math.min(Math.max(0,Math.floor(+$('seekN').value||0)),Math.max(ids.length-1,0));
   ids.forEach((id,i)=>state.players[id].team=i<k?'seeker':'hider');broadcast();toast('Teams randomized')};
@@ -1027,10 +1037,10 @@ $('again').onclick=()=>{state.status='lobby';state.locs={};liveStore={};state.pi
 /* ===== client ===== */
 function send(d){if(me.isHost)hostHandle(me.id,d);else if(hostConn&&hostConn.open)hostConn.send(d)}
 function applyState(s){
-  const pt=me.team;state=s;skew=s.now-Date.now();const mine=s.players[me.id];if(mine)me.team=mine.team;const teamChanged=!first&&pt!==me.team&&s.status==='running'&&prevStatus==='running';
+  const pt=me.team;state=s;skew=s.now-Date.now();const po=!!me.out;const mine=s.players[me.id];if(mine){me.team=mine.team;me.out=!!mine.out}const outBack=!first&&po&&!me.out&&s.status==='running';const teamChanged=!first&&pt!==me.team&&s.status==='running'&&prevStatus==='running';
   if(!entered){entered=true;$('join').classList.add('hidden');$('app').classList.remove('hidden');$('roomcode').textContent=me.code;initMap();startBattery()}
   const pinged=!first&&lastPingN!==null&&s.pingN>lastPingN;lastPingN=s.pingN;first=false;
-  if(s.status==='running'){keepAwake();const own=live[me.id];live=Object.assign({},s.live||{});if(own&&(!live[me.id]||own.ts>live[me.id].ts))live[me.id]=own;
+  if(s.status==='running'){keepAwake();if(me.out){stopWatch();stopSnapCam();delete live[me.id]}const own=live[me.id];live=Object.assign({},s.live||{});if(own&&(!live[me.id]||own.ts>live[me.id].ts))live[me.id]=own;
     // belt and braces: even if something stale slipped in, a seeker never keeps a hider's live dot
     Object.keys(live).forEach(id=>{const p=s.players[id];if(id!==me.id&&(!p||!canSeeLive(me.team,p.team,id)))delete live[id]});
     startWatch()}
@@ -1039,7 +1049,7 @@ function applyState(s){
     if(s.status==='running'&&!resumed){showReveal();photos=me.isHost?photos:[];renderGal()}
     if(s.status==='lobby'){photos=me.isHost?[]:[];renderGal()}
     if(s.status==='over'){play('over');notify('Manhunt','The game is over.','over')}}
-  prevStatus=s.status;syncLobbyMusic();if(teamChanged)showReveal();render();syncCalls();scheduleCountdown();syncCam();seekerPulse(s);syncSos();
+  prevStatus=s.status;syncLobbyMusic();if(teamChanged||outBack)showReveal();render();syncCalls();scheduleCountdown();syncCam();seekerPulse(s);syncSos();
   if(pinged){const pre=A&&A.state==='running'&&Math.abs(Date.now()-schedPingAt)<4000;if(!pre)play('ping');
     if(navigator.vibrate)navigator.vibrate([200,100,200]);flash();
     const m=me.team==='hider'?'Ping. Seekers got a rough circle around you. Photo in 1 min.':'Ping. Hider circles updated. Photos incoming.';toast(m);notify('Manhunt ping',m,'ping')}
@@ -1049,7 +1059,7 @@ function flash(){const f=$('flash');f.classList.remove('go');void f.offsetWidth;
 function pulse(ll,col,r0,r1){if(!map)return;const c=L.circle(ll,{radius:r0,color:col,weight:3,fill:false,interactive:false}).addTo(map),t0=performance.now();
   (function st(t){const k=Math.min(1,(t-t0)/1400),e=1-Math.pow(1-k,3);c.setRadius(r0+(r1-r0)*e);c.setStyle({opacity:1-k});if(k<1)requestAnimationFrame(st);else c.remove()})(t0)}
 function startWatch(){
-  if(watchId!==null||!navigator.geolocation||!$('liveToggle').checked||!state||state.status!=='running')return;
+  if(me.out||watchId!==null||!navigator.geolocation||!$('liveToggle').checked||!state||state.status!=='running')return;
   watchErr=false;
   // iOS Safari can stop delivering updates after backgrounding or a temporary GPS timeout.
   // Use a longer timeout and allow a recent fix while the device warms up.
@@ -1075,7 +1085,7 @@ function startWatch(){
 function stopWatch(){if(watchId!==null&&navigator.geolocation){navigator.geolocation.clearWatch(watchId);watchId=null}lastFix=null}
 $('liveToggle').onchange=()=>{if($('liveToggle').checked){if(state&&state.status==='running')startWatch()}else{stopWatch();delete live[me.id];send({t:'liveoff'});drawLive()}};
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible'&&entered&&state&&state.status==='running'&&$('liveToggle').checked){
+  if(document.visibilityState==='visible'&&entered&&state&&state.status==='running'&&$('liveToggle').checked&&!me.out){
     if(watchId===null)startWatch();
     // Request a fresh fix after returning to Safari; iOS may have suspended the old GPS session.
     getFix(p=>{
@@ -1115,7 +1125,7 @@ function zoneCheck(lat,lng){if(!state||state.status!=='running'||!state.zone)ret
 function onZoneAlert(a){if(!a||!a.id)return;zoneAlerts[a.id]=a;syncZoneAlarm();drawLive();if(a.out)toast(a.name+' LEFT THE PLAYING CIRCLE! Location shared with everyone.',6000);else toast(a.name+' returned. Location will remain visible for 15 seconds.',4500)}
 function syncZoneAlarm(){const active=Object.values(zoneAlerts).some(a=>a.out);if(active&&!zoneAlarmTimer){const beep=()=>{if(!Object.values(zoneAlerts).some(a=>a.out)){clearInterval(zoneAlarmTimer);zoneAlarmTimer=null;return}if($('soundToggle')?.checked){audio();try{const v=V(),t=A.currentTime;note(v,t,{f:880,f2:620,d:.28,g:.22,type:'square',a:.01});note(v,t+.32,{f:880,f2:620,d:.28,g:.22,type:'square',a:.01})}catch(e){}}};beep();zoneAlarmTimer=setInterval(beep,900)}else if(!active&&zoneAlarmTimer){clearInterval(zoneAlarmTimer);zoneAlarmTimer=null}}
 setInterval(()=>{let changed=false;Object.keys(zoneAlerts).forEach(id=>{const a=zoneAlerts[id];if(!a.out&&a.until&&Date.now()>a.until){delete zoneAlerts[id];changed=true;const pp=state&&state.players[id];if(pp&&id!==me.id&&!canSeeLive(me.team,pp.team,id))delete live[id]}});if(changed)drawLive();syncZoneAlarm()},1000);
-function doPing(){
+function doPing(){if(me.out)return;
   if(!state||state.status!=='running'||me.team!=='hider')return;
   const useLast=()=>{if(lastFix){send({t:'loc',lat:lastFix.lat,lng:lastFix.lng,hd:heading===null?undefined:Math.round(heading)});return true}return false};
   const okp=p=>send({t:'loc',lat:p.coords.latitude,lng:p.coords.longitude,hd:heading===null?undefined:Math.round(heading)});
@@ -1137,7 +1147,7 @@ async function snapCam(){
   catch(e){toast('Camera blocked. Seekers will not get your photos. Allow camera for this site.',7000)}
   camBusy=false}
 function stopSnapCam(){if(snapStream){snapStream.getTracks().forEach(t=>t.stop());snapStream=null}}
-async function doSnap(n){
+async function doSnap(n){if(me.out)return;
   if(me.team!=='hider'||!state||state.status!=='running')return;
   let tmp=null,v=$('snapV');
   try{
@@ -1196,15 +1206,15 @@ function render(){
   $('status').textContent={lobby:'Lobby',running:'Live',over:'Over'}[s.status];$('status').dataset.s=s.status;
   $('hostSettings').classList.toggle('hidden',!(me.isHost&&lobby));$('hostNote').classList.toggle('hidden',!me.isHost);$('guestWait').classList.toggle('hidden',me.isHost||!lobby);$('lobbyBox').classList.toggle('hidden',!lobby);
   $('end').classList.toggle('hidden',!(me.isHost&&s.status==='running'));$('adminSwitch').classList.toggle('hidden',!me.admin);$('adminSwitch').textContent='Admin: switch to '+(me.team==='hider'?'Seeker':'Hider');$('pingNow').classList.toggle('hidden',!(me.isHost&&s.status==='running'));$('again').classList.toggle('hidden',!(me.isHost&&s.status==='over'));
-  $('teamTxt').textContent=lobby?'Right now you are a '+me.team:(me.team==='hider'?"You're hiding":"You're seeking");
+  $('teamTxt').textContent=me.out?"You're sitting out":lobby?'Right now you are a '+me.team:(me.team==='hider'?"You're hiding":"You're seeking");
   $('rule').textContent=me.team==='hider'?`You see every seeker live, plus fellow hiders. Seekers only see a rough 0.1 mile circle around you every ${s.pingMin} min, and your camera photo 1 min later.`:`You see fellow seekers live. Hiders stay hidden and only appear as 0.1 mile circles every ${s.pingMin} min, followed by a photo of each.`;
   const a=avatar(s.players[me.id]||{name:me.name,pic:me.pic},40,me.team);$('meAv').replaceChildren(...a.childNodes);$('meAv').className=a.className;
-  $('pttSub').textContent=me.team==='hider'?'Hider radio':'Seeker radio';$('sheetCount').textContent=Object.values(s.players).filter(p=>!p.off).length;renderGal();
+  $('pttSub').textContent=me.out?'Sitting out':(me.team==='hider'?'Hider radio':'Seeker radio');$('outNote').classList.toggle('hidden',!me.out);$('sitBtn').textContent=me.out?'Rejoin the game':'Sit out';$('sitBtn').classList.toggle('hot',!!me.out);$('sheetCount').textContent=Object.values(s.players).filter(p=>!p.off).length;renderGal();
   const ul=$('players');ul.innerHTML='';
   s.order.forEach(id=>{const p=s.players[id];if(!p)return;const li=document.createElement('li');if(p.off)li.classList.add('off');li.appendChild(avatar(p,38,p.team));li.classList.add('tap');li.onclick=()=>openDir(id);
     const w=document.createElement('div');w.className='who';const n=document.createElement('div');n.className='nm2';n.textContent=p.name+(id===me.id?' (you)':'');if(typeof p.batt==='number'){const bs=document.createElement('span');bs.className='batt'+(p.batt<=20?' low':'');bs.textContent=(p.chg?'⚡ ':'')+p.batt+'%';n.appendChild(bs)}
-    const sb=document.createElement('div');sb.className='small';const last=(s.locs[id]||[]).slice(-1)[0],b=[];if(id===s.hostId)b.push('host');if(zoneAlerts[id]&&zoneAlerts[id].out)b.push('OUTSIDE THE CIRCLE');if(p.off)b.push('offline');else if(last)b.push(last.err?'no GPS fix on last ping':'ping '+ago(last.ts));else if(s.status==='running'&&p.team==='hider')b.push('no ping yet');sb.textContent=b.join(', ');
-    w.append(n,sb);li.appendChild(w);const tg=document.createElement('span');tg.className='tg '+(p.team==='hider'?'h':'s');tg.textContent=p.team==='hider'?'Hider':'Seeker';if(s.status==='running'&&p.team==='hider'&&!p.off&&(me.team==='seeker'||id===me.id)){const fb=document.createElement('button');fb.className='btn hot sm';fb.textContent=id===me.id?'I got found':'Found';fb.onclick=ev=>{ev.stopPropagation();askFound(id)};li.appendChild(fb)}li.appendChild(tg);
+    const sb=document.createElement('div');sb.className='small';const last=(s.locs[id]||[]).slice(-1)[0],b=[];if(id===s.hostId)b.push('host');if(p.out)b.push('sitting out');if(zoneAlerts[id]&&zoneAlerts[id].out)b.push('OUTSIDE THE CIRCLE');if(p.off)b.push('offline');else if(last)b.push(last.err?'no GPS fix on last ping':'ping '+ago(last.ts));else if(s.status==='running'&&p.team==='hider'&&!p.out)b.push('no ping yet');sb.textContent=b.join(', ');
+    w.append(n,sb);li.appendChild(w);const tg=document.createElement('span');tg.className='tg '+(p.team==='hider'?'h':'s');tg.textContent=p.out?'Sitting out':(p.team==='hider'?'Hider':'Seeker');if(p.out)tg.className='tg o';if(s.status==='running'&&p.team==='hider'&&!p.off&&!p.out&&!me.out&&(me.team==='seeker'||id===me.id)){const fb=document.createElement('button');fb.className='btn hot sm';fb.textContent=id===me.id?'I got found':'Found';fb.onclick=ev=>{ev.stopPropagation();askFound(id)};li.appendChild(fb)}li.appendChild(tg);
     if(me.isHost||me.admin){const sw=document.createElement('button');sw.className='btn ghost sm';sw.textContent='Make '+(p.team==='hider'?'seeker':'hider');
       sw.onclick=ev=>{ev.stopPropagation();send({t:'setteam',id,team:p.team==='hider'?'seeker':'hider'})};li.appendChild(sw)}if(me.isHost&&id!==me.id&&!p.off){const kb=document.createElement('button');kb.className='btn hot sm';kb.textContent='Kick';kb.setAttribute('aria-label','Kick '+p.name);kb.onclick=ev=>{ev.stopPropagation();if(confirm('Kick '+p.name+' from this game?'))send({t:'kick',id})};li.appendChild(kb)}ul.appendChild(li)});
   drawMap();tick();paintZoneBox();
@@ -1263,7 +1273,7 @@ function drawPings(){
 let dlq=0;function drawLive(){if(dlq)return;dlq=requestAnimationFrame(()=>{dlq=0;drawLiveNow()})}   // merge bursts of updates into one redraw per frame
 function drawLiveNow(){
   if(!layerL||!state)return;layerL.clearLayers();
-  Object.entries(live).forEach(([id,l])=>{const p=state.players[id];if(!p||p.off)return;if(state.sos&&state.sos.id===id)return;
+  Object.entries(live).forEach(([id,l])=>{const p=state.players[id];if(!p||p.off||p.out)return;if(state.sos&&state.sos.id===id)return;
     if(id!==me.id&&!canSeeLive(me.team,p.team,id))return;   // seekers never draw a hider's live dot
     const col=p.team==='hider'?HC:SC;
     L.circle([l.lat,l.lng],{radius:Math.max(l.acc||8,5),color:col,weight:1,fillOpacity:.12,interactive:false}).addTo(layerL);
@@ -1288,7 +1298,7 @@ $('locme').onclick=()=>{askOrient();getFix(p=>{
   meLL=[p.coords.latitude,p.coords.longitude];
   const acc=Number.isFinite(p.coords.accuracy)?p.coords.accuracy:9999;
   // Reuse the live player marker if present instead of adding a duplicate marker.
-  if(entered&&state&&state.status==='running'&&$('liveToggle').checked){
+  if(entered&&state&&state.status==='running'&&$('liveToggle').checked&&!me.out){
     lastFix={lat:meLL[0],lng:meLL[1],acc,ts:Date.now()};
     live[me.id]={lat:meLL[0],lng:meLL[1],acc,hd:heading===null?undefined:Math.round(heading),ts:Date.now()+skew};
     drawLive();send({t:'live',lat:meLL[0],lng:meLL[1],acc,hd:live[me.id].hd});
@@ -1345,7 +1355,7 @@ $('fYes').onclick=()=>{const id=foundId,mode=foundMode,from=foundFrom;foundId=nu
 function onFoundReq(pid,d){   // host: a seeker asks a hider to confirm
   if(!state||state.status!=='running')return;
   const by=state.players[pid],t=state.players[d.id];
-  if(!by||!t||by.team!=='seeker'||t.team!=='hider'||t.off)return;
+  if(!by||!t||by.team!=='seeker'||t.team!=='hider'||t.off||t.out||by.out)return;
   const m={t:'foundask',from:pid,by:by.name,id:d.id};
   if(d.id===me.id){onFoundAsk(m);return}
   const c=conns[d.id];if(c){try{c.send(m)}catch(e){}}}
@@ -1355,14 +1365,14 @@ function onFoundDeny(pid,d){   // host: the hider said no
   const c=conns[d.to];if(c){try{c.send(m)}catch(e){}}}
 function onFound(pid,d){   // host: only the hider themselves can make this call
   if(!state||state.status!=='running'||state.paused||d.id!==pid)return;
-  const t=state.players[pid];if(!t||t.team!=='hider')return;
+  const t=state.players[pid];if(!t||t.team!=='hider'||t.out)return;
   const by=d.by&&state.players[d.by]&&state.players[d.by].team==='seeker'?state.players[d.by]:null;
   t.team='seeker';delete state.locs[pid];
   const msg={t:'foundmsg',name:t.name,by:by?by.name:null};
   Object.values(conns).forEach(c=>{try{c.send(msg)}catch(e){}});
   const c=conns[pid];if(c){try{c.send({t:'photos',list:photos})}catch(e){}}
   onFoundMsg(msg);
-  if(!Object.values(state.players).some(p=>p.team==='hider'&&!p.off)){state.status='over';liveStore={}}
+  if(!Object.values(state.players).some(p=>p.team==='hider'&&!p.off&&!p.out)){state.status='over';liveStore={}}
   broadcast()}
 function onFoundMsg(m){const txt=m.name+' was found'+(m.by?' by '+m.by:'')+'. Now a seeker.';toast(txt,5000);play('chat');notify('Manhunt',txt,'found')}
 
@@ -1392,15 +1402,15 @@ $('tabTeam').onclick=()=>{chatTab='team';renderChat()};$('tabAll').onclick=()=>{
 $('chatForm').onsubmit=e=>{e.preventDefault();const text=$('chatIn').value.trim();if(!text)return;send({t:'chat',scope:chatTab,text});$('chatIn').value=''};
 
 /* ===== team radio ===== */
-function onCall(call){if(call.metadata&&call.metadata.kind==='cam'){if(!state||!$('camAllow').checked){call.close();return}call.answer();wireCam(call);return}const p=state&&state.players[call.peer];if(!p||p.team!==me.team){call.close();return}call.answer(localStream);wireCall(call)}
+function onCall(call){if(call.metadata&&call.metadata.kind==='cam'){if(!state||!$('camAllow').checked){call.close();return}call.answer();wireCam(call);return}const p=state&&state.players[call.peer];if(!p||p.team!==me.team||p.out||me.out){call.close();return}call.answer(localStream);wireCall(call)}
 function wireCall(call){calls[call.peer]=call;
   call.on('stream',st=>{if(micTrack)setCallTrack(micTrack);let a=audioEls[call.peer];if(!a){a=document.createElement('audio');a.autoplay=true;a.setAttribute('playsinline','');$('audios').appendChild(a);audioEls[call.peer]=a}a.srcObject=st;a.play().catch(()=>{})});
   const drop=()=>{if(calls[call.peer]===call)delete calls[call.peer];const a=audioEls[call.peer];if(a){a.remove();delete audioEls[call.peer]}};call.on('close',drop);call.on('error',drop)}
 function syncCalls(){if(!state||!localStream||!peer)return;
-  Object.entries(calls).forEach(([id,c])=>{const p=state.players[id];if(!p||p.off||p.team!==me.team){c.close();delete calls[id];const a=audioEls[id];if(a){a.remove();delete audioEls[id]}}});
-  Object.entries(state.players).forEach(([id,p])=>{if(id===me.id||p.off||p.team!==me.team||calls[id])return;if(me.id<id){const c=peer.call(id,localStream);if(c)wireCall(c)}})}
+  Object.entries(calls).forEach(([id,c])=>{const p=state.players[id];if(!p||p.off||p.team!==me.team||p.out||me.out){c.close();delete calls[id];const a=audioEls[id];if(a){a.remove();delete audioEls[id]}}});
+  Object.entries(state.players).forEach(([id,p])=>{if(id===me.id||p.off||p.out||me.out||p.team!==me.team||calls[id])return;if(me.id<id){const c=peer.call(id,localStream);if(c)wireCall(c)}})}
 function endMic(){if(micStream){micStream.getTracks().forEach(t=>{try{t.stop()}catch(e){}});micStream=null;micTrack=null}const s=localStream&&localStream.getAudioTracks()[0];if(s)setCallTrack(s)}
-async function talk(on){if(!localStream||on===talking)return;talking=on;const seq=++talkSeq;$('ptt').classList.toggle('live',on);$('pttTxt').textContent=on?'On air':'Hold to talk';if(navigator.vibrate)navigator.vibrate(on?20:0);send({t:'talk',on});play(on?'pttOn':'pttOff');
+async function talk(on){if(!localStream||on===talking||(on&&me.out))return;talking=on;const seq=++talkSeq;$('ptt').classList.toggle('live',on);$('pttTxt').textContent=on?'On air':'Hold to talk';if(navigator.vibrate)navigator.vibrate(on?20:0);send({t:'talk',on});play(on?'pttOn':'pttOff');
   if(!on){endMic();return}
   try{const st=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
     if(seq!==talkSeq||!talking){st.getTracks().forEach(t=>t.stop());return}
@@ -1474,7 +1484,7 @@ function openCam(){camOpen=true;$('cam').classList.remove('hidden');if(!camAud)s
 function closeCam(){camOpen=false;$('cam').classList.add('hidden')}
 $('camBtn').onclick=()=>camOpen?closeCam():openCam();$('camClose').onclick=closeCam;
 if(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia)$('recScreen').classList.remove('hidden');
-function audMatch(p){if(!p||p.off||camAud==='none')return false;return camAud==='all'||p.team===camAud}
+function audMatch(p){if(!p||p.off||p.out||camAud==='none')return false;return camAud==='all'||p.team===camAud}
 function syncCam(){
   if(!camStream||!peer||!state)return;
   Object.entries(camOut).forEach(([id,c])=>{if(!audMatch(state.players[id])){try{c.close()}catch(e){}delete camOut[id]}});
@@ -1740,6 +1750,8 @@ function closeDir(){clearInterval(dirTimer);clearInterval(dirArrowTimer);dirTime
 $('dirClose').onclick=closeDir;
 $('dirMaps').onclick=()=>{const t=dirTgt||(dirId&&dirTarget(dirId));if(!t){toast('No live location to navigate to');return}
   window.open(isIOS?'https://maps.apple.com/?dirflg=w&daddr='+t.lat+','+t.lng:'https://www.google.com/maps/dir/?api=1&travelmode=walking&destination='+t.lat+','+t.lng,'_blank')};
+/* ===== sit out: step away from the game and rejoin whenever you want ===== */
+$('sitBtn').onclick=()=>{if(!entered||!state)return;const on=!me.out;send({t:'sitout',on});if(on){talk(false);setSheet(false)}toast(on?'You are sitting out. Rejoin any time from the players sheet.':'Rejoining the game…',3500)};
 /* ===== auto-resume after reload or discarded tab (host restores the saved game) ===== */
 (function(){try{const s=JSON.parse(store.get('mh_sess')||'null'),want=params.get('room')?params.get('room').toUpperCase():null;
   if(s&&s.code&&Date.now()-s.ts<12*3600e3&&(!want||want===s.code)){resumed=true;me.name=store.get('mh_name')||'Player';toast('Rejoining '+s.code+'…',5000);
